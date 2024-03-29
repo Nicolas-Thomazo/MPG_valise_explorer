@@ -13,6 +13,7 @@ def get_json_bonus():
 
 def get_total_team_bonus_played(team_id: str) -> dict:
     results = []
+    team_id = team_id.replace("'","''")
     for prefix in ["h_", "v_"]:
         results.append(
             duckdb.query(

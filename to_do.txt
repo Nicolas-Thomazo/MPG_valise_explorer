@@ -1,0 +1,7 @@
+1- Déployer le code sur docker
+
+2- Orchestrer et mettre en place une pipeline (avec Kestra ?)
+
+3- Faire une fonction qui check quelles journées ont déjà été scrappées
+
+4- Scrapper les transferts

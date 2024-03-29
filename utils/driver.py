@@ -18,7 +18,7 @@ class Driver:
     def __init__(self, docker=True) -> None:
         if docker:
             self.chrome_options.add_argument("--no-sandbox")
-            self.chrome_options.add_argument("--headless")
+            self.chrome_options.add_argument("--headless=new")
             self.chrome_options.add_argument("--disable-dev-shm-usage")
             self.chrome_options.page_load_strategy = "normal"
 
@@ -66,10 +66,8 @@ class Driver:
 
         self.accept_cookies()
 
-        self.driver.implicitly_wait(10)
-
-        self.driver.find_element(By.ID, "login").send_keys(user)
-        self.driver.find_element(By.ID, "password").send_keys(password)
+        WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable((By.ID, "login"))).send_keys(user)
+        WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable((By.ID, "password"))).send_keys(password)
 
         buttons = self.driver.find_elements(By.TAG_NAME, "button")
         for button in buttons:
