@@ -1,20 +1,20 @@
-import json
-import os
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
-__location__ = os.path.realpath(
-    os.path.join(os.getcwd(), os.path.dirname(__file__)))
+
+class LeagueConfig(BaseSettings):
+    USE_VAR_ENV: bool = Field(default=False, env="USE_VAR_ENV")
+    MAIL: str = Field(..., env="MAIL")
+    PASSWORD: str = Field(..., env="PASSWORD")
+    IS_DOCKER: bool = Field(default=True, env="IS_DOCKER")
+    LEAGUE_ID: str = Field(..., env="LEAGUE_ID")
+    RESULTS_LINK: str = Field(..., env="RESULTS_LINK")
+    SEASON_NB: int = Field(..., env="SEASON_NB")
+    DIVISION: int = Field(..., env="DIVISION")
+    NB_PLAYERS: int = Field(..., env="NB_PLAYERS")
+    MATCHWEEK: int = Field(..., env="MATCHWEEK")
+
 
 def get_config():
-    """
-    This function imports credentials and settings put in the config/config.json file. 
-    It raises an error if it doesn't exist.
-
-    :raises FileNotFoundError: Typical error if someone tries to run the launch.py without configuration
-    :return: _description_
-    """
-    if os.path.isfile(f"{__location__}/config.json"):
-        with open(os.path.join(__location__, "config.json"), "r") as file:
-            config = json.load(file)
-        return config
-    else:
-        raise FileNotFoundError("'config.json' not found. Edit config/config_example.json with your informations and rename it 'config.json'") 
+    league_config = LeagueConfig()
+    return league_config.model_dump()

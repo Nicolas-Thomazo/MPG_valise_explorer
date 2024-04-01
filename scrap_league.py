@@ -5,28 +5,20 @@ from utils.log import init_logger
 
 init_logger()
 config = get_config()
-
-Driver = Driver(docker=config["options"]["is_docker"])
+print(config)
+Driver = Driver(docker=config["IS_DOCKER"])
 
 # Define your credentials
-user = config["credentials"]["username"]
-password = config["credentials"]["password"]
-
-# Load league options
-league_id = config["league"]["league_id"]
-results_link = config["league"]["results_link"]
-season_nb = config["league"]["season_nb"]
-division = config["league"]["division"]
-nb_players = config["league"]["nb_players"]
-
+user = config["MAIL"]
+password = config["PASSWORD"]
 Driver.logging(user, password)
 
 league = League(
     driver=Driver.driver,
-    league_id=league_id,
-    results_link=results_link,
-    season_nb=season_nb,
-    division=division,
-    nb_players=nb_players,
-    matchweeks=[1]
+    league_id=config["LEAGUE_ID"],
+    results_link=config["RESULTS_LINK"],
+    season_nb=config["SEASON_NB"],
+    division=config["DIVISION"],
+    nb_players=config["NB_PLAYERS"],
+    matchweeks=[config["MATCHWEEK"]],
 )

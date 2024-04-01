@@ -1,4 +1,5 @@
 import logging
+import time
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -34,6 +35,7 @@ class Driver:
         2- Try to click on this button for every iframe.
         3- Raising an error if cookies weren't accepted
         """
+        time.sleep(1)
         iframes = self.driver.find_elements(By.TAG_NAME, "iframe")
         accepted = False
         for iframe in iframes:

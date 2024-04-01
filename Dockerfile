@@ -6,6 +6,7 @@ COPY /utils /utils
 COPY requirements.txt .
 COPY scrap_league.py .
 
+#We have to create the folder to be able to write exports files
 RUN mkdir -p /exports
 
 RUN pip install --trusted-host pypi.python.org -r requirements.txt
