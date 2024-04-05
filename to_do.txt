@@ -1,7 +1,21 @@
-1- Déployer le code sur docker
+1- Ecrire les résultats directement dans Azure
 
-2- Orchestrer et mettre en place une pipeline (avec Kestra ?)
+    a- Comment s'authentifier ?
+    https://learn.microsoft.com/en-us/azure/developer/python/sdk/authentication-azure-hosted-apps?tabs=azure-cli%2Cazure-app-service
+
+    https://learn.microsoft.com/en-us/azure/developer/python/sdk/authentication-local-development-service-principal?source=recommendations&tabs=azure-cli
+    
+    b- Création du storage
+
+    c- Lire & Ecrire les fichiers
+
+2- Lancer le script avec Azure
 
 3- Faire une fonction qui check quelles journées ont déjà été scrappées
 
-4- Scrapper les transferts
+4- Update les inputs sur Kestra de la bonne manière (en utilisant la fonction du 3-)
+
+5- Nouveau flow pour m'envoyer un mail avec les bonus restants de mon prochain adversaire
+(ou de tout les adversaires ?)
+
+6- Scrapper les transferts

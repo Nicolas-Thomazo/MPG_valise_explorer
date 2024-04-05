@@ -1,8 +1,7 @@
-import logging
-import time
-from scrap.mpg import MPG
-
 import polars as pl
+
+from scrap.mpg import MPG
+from utils.azure import AzureUtils
 
 pl.Config(tbl_cols=22)
 from selenium.webdriver.common.by import By
@@ -33,7 +32,7 @@ class Game(MPG):
         "decat",
         "5défenseurs",
         "4défenseurs",
-        "capitaine"
+        "capitaine",
     ]
 
     export_game_path = "exports/games.parquet"
@@ -44,7 +43,6 @@ class Game(MPG):
     real_goals_color = "#696773"
     mpg_goals_color = "#45C945"
     save_goals_color = "#EF1728"
-
 
     def get_players_info_df(self, scores_tab_element):
         """
@@ -203,7 +201,7 @@ class Game(MPG):
             df = historical_df.vstack(df)
         except FileNotFoundError:
             print("No history file found.")
-        df.write_parquet(self.export_game_path)
+        self.AzureUtils.write_parquet(data=df, path=self.export_game_path)
         print(df)
 
     def db_bonus_insert(self):
@@ -242,7 +240,7 @@ class Game(MPG):
             df = historical_df.vstack(df)
         except FileNotFoundError:
             print("No history file found.")
-        df.write_parquet(self.export_bonus_path)
+        self.AzureUtils.write_parquet(data=df, path=self.export_bonus_path)
         print(df)
 
     def __init__(
@@ -272,6 +270,7 @@ class Game(MPG):
         self.season_nb = season_nb
         self.division = division
         self.game_season_nb = game_season_nb
+        self.AzureUtils = AzureUtils()
 
         get_url(driver=self.driver, url=game_link)
 
