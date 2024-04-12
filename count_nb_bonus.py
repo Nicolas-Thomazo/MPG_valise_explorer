@@ -7,12 +7,12 @@ from utils.log import init_logger
 init_logger()
 config = get_config()
 
-league_id = config['league']['league_id']
-season_nb = config['league']['season_nb']
-team_name = config['team']['name']
+league_id = config["LEAGUE_ID"]
+season_nb = config["SEASON_NB"]
+team_name = config["TEAM"]
 team_id = f"{league_id}_{season_nb}_{team_name}"
 
-remaining_bonus = get_remaining_bonus_player(team_id=team_id, nb_players=6)
+remaining_bonus = get_remaining_bonus_player(team_id=team_id, nb_players=config["NB_PLAYERS"])
 
 print(f"Remaining bonuses of {team_name} are:")
 for bonus in remaining_bonus:

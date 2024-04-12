@@ -1,9 +1,20 @@
 import json
+import os
 
 import duckdb
-import polars
 
 bonus_json_path = "utils/bonus.json"
+
+
+def azure_secret():
+    """
+    This function is connection DuckDB to our Azure storage using connection string
+    """
+    conn_string = os.environ["AZURE_STORAGE_CONNECTION_STRING"]
+    duckdb.sql("install azure")
+    duckdb.sql("load azure")
+    duckdb.sql(f"set azure_storage_connection_string = '{conn_string}'")
+    duckdb.sql(f"set azure_transport_option_type = 'curl'")
 
 
 def get_json_bonus():
@@ -13,13 +24,13 @@ def get_json_bonus():
 
 def get_total_team_bonus_played(team_id: str) -> dict:
     results = []
-    team_id = team_id.replace("'","''")
+    team_id = team_id.replace("'", "''")
     for prefix in ["h_", "v_"]:
         results.append(
             duckdb.query(
                 f"""
         SELECT
-            SUM({prefix}valise) AS valise,
+            SUM({prefix}valise) AS valise, 
             SUM({prefix}ubereats) AS ubereats,
             SUM({prefix}suarez) AS suarez,
             SUM({prefix}zahia) AS zahia,
@@ -27,8 +38,8 @@ def get_total_team_bonus_played(team_id: str) -> dict:
             SUM({prefix}chapron) AS chapron,
             SUM({prefix}tonton) AS tonton,
             SUM({prefix}decat) AS decat
-        FROM 'exports/games.parquet' G
-        INNER JOIN 'exports/bonus.parquet' B ON G.match_id = B.match_id
+        FROM 'azure://scrapping-exports/exports/games.parquet' G
+        INNER JOIN 'azure://scrapping-exports/exports/bonus.parquet' B ON G.match_id = B.match_id
         WHERE {prefix}teamid = '{team_id}'
         GROUP BY {prefix}teamid
         """
@@ -53,6 +64,7 @@ def get_remaining_bonus_player(team_id: str, nb_players: int):
     if nb_players not in [4, 6, 8, 10]:
         raise ValueError("Number of players must be one of : [4, 6, 8, 10]")
 
+    azure_secret()
     bonus = get_json_bonus()
     start_bonus = bonus[f"{nb_players}_players"]
 
