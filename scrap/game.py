@@ -197,12 +197,12 @@ class Game(MPG):
             }
         )
         try:
-            historical_df = pl.read_parquet(self.export_game_path)
+            historical_df = pl.read_parquet(self.AzureUtils.read_file(self.export_game_path))
             df = historical_df.vstack(df)
-        except FileNotFoundError:
+        except TypeError:
             print("No history file found.")
-        self.AzureUtils.write_parquet(data=df, path=self.export_game_path)
-        print(df)
+        self.AzureUtils.write_file(data=df, path=self.export_game_path)
+        print(f"Games file now has a lenght of {df.select(pl.count())[0,0]} rows.")
 
     def db_bonus_insert(self):
         """
@@ -236,12 +236,12 @@ class Game(MPG):
             }
         )
         try:
-            historical_df = pl.read_parquet(self.export_bonus_path)
+            historical_df = pl.read_parquet(self.AzureUtils.read_file(self.export_bonus_path))
             df = historical_df.vstack(df)
-        except FileNotFoundError:
+        except TypeError:
             print("No history file found.")
-        self.AzureUtils.write_parquet(data=df, path=self.export_bonus_path)
-        print(df)
+        self.AzureUtils.write_file(data=df, path=self.export_bonus_path)
+        print(f"Bonus file now has a lenght of {df.select(pl.count())[0,0]} rows.")
 
     def __init__(
         self,

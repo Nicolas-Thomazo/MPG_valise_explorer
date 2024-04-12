@@ -1,17 +1,20 @@
+import polars as pl
+
 from config.config_reader import get_config
 from scrap.league import League
+from utils.azure import AzureUtils
 from utils.driver import Driver
 from utils.log import init_logger
 
 init_logger()
 config = get_config()
-print(config)
 Driver = Driver(docker=config["IS_DOCKER"])
 
 # Define your credentials
 user = config["MAIL"]
 password = config["PASSWORD"]
 Driver.logging(user, password)
+
 
 league = League(
     driver=Driver.driver,

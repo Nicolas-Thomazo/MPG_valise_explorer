@@ -13,6 +13,8 @@ class LeagueConfig(BaseSettings):
     DIVISION: int = Field(..., env="DIVISION")
     NB_PLAYERS: int = Field(..., env="NB_PLAYERS")
     MATCHWEEK: int = Field(..., env="MATCHWEEK")
+    TEAM: str = Field(..., env="TEAM")
+    AZURE_STORAGE_CONNECTION_STRING: str = Field(..., env="AZURE_STORAGE_CONNECTION_STRING")
 
 
 def get_config():
