@@ -33,16 +33,11 @@ class Game(MPG):
         "5défenseurs",
         "4défenseurs",
         "capitaine",
+        "4decat",
     ]
 
     export_game_path = "exports/games.parquet"
     export_bonus_path = "exports/bonus.parquet"
-
-    # Unused
-    goals_class = "sc-bcXHqe crTPxA"
-    real_goals_color = "#696773"
-    mpg_goals_color = "#45C945"
-    save_goals_color = "#EF1728"
 
     def get_players_info_df(self, scores_tab_element):
         """
@@ -145,6 +140,8 @@ class Game(MPG):
             bonus_name = bonus.find_element(By.TAG_NAME, "p").text.lower().replace(" ", "")
             bonus_name = bonus_name.replace("chapronrouge", "chapron")
             bonus_name = bonus_name.replace("lavaliseànanard", "valise")
+            bonus_name = bonus_name.replace("4-decat'", "4decat")
+            print(self.all_bonus_list)
             if bonus_name in self.all_bonus_list:
                 bonus_dict[f"{prefix}{bonus_name}"] += 1
             else:
@@ -193,7 +190,7 @@ class Game(MPG):
                 "v_real_goals": self.v_real_goals,
                 "v_own_goals": self.v_own_goals,
                 "v_red_cards": self.v_red_cards,
-                "game_season_nb": self.game_season_nb,
+                "matchweek": self.matchweek,
             }
         )
         try:
@@ -249,7 +246,7 @@ class Game(MPG):
         league_id: str,
         season_nb: int,
         division: int,
-        game_season_nb: int,
+        matchweek: int,
         game_link: str,
     ):
         """
@@ -260,7 +257,7 @@ class Game(MPG):
         :param league_id: MPG league unique ID (eg: 'KWGFGJUM')
         :param season_nb: Season number
         :param division: Division
-        :param game_season_nb: How many matches has it been th
+        :param matchweek: How many matches has it been th
         is season?
         :param game_link: mpg full link
         """
@@ -269,7 +266,7 @@ class Game(MPG):
         self.league_id = league_id
         self.season_nb = season_nb
         self.division = division
-        self.game_season_nb = game_season_nb
+        self.matchweek = matchweek
         self.AzureUtils = AzureUtils()
 
         get_url(driver=self.driver, url=game_link)

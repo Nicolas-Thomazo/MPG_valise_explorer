@@ -1,6 +1,7 @@
 config/config.json
 exports/*
 *.pyc 
+credentials/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
