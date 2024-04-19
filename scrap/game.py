@@ -129,6 +129,10 @@ class Game(MPG):
         :param bonus_class: Lowest bonus class level => Giving the name of the bonus directly
         :param bonus_class: Dictionary to update if bonuses are found
         :param home: Is the team home or visitor ?
+
+        TODO: Find a better way to catch out mirror possible problem.
+        => Dès que j'ai un bonus miroir je coupe le comtpe des bonus, mais je rate la récup
+        sur les défenses à 4 et 5 à ce moment là du coup. + méthodo pas folle
         """
         if home:
             prefix = "h_"
@@ -144,6 +148,8 @@ class Game(MPG):
             print(self.all_bonus_list)
             if bonus_name in self.all_bonus_list:
                 bonus_dict[f"{prefix}{bonus_name}"] += 1
+                if bonus_name == "miroir":
+                    return bonus_dict
             else:
                 raise ValueError(f"Found an unknown bonus name : {bonus_name}")
         return bonus_dict
