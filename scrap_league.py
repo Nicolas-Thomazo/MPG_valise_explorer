@@ -19,5 +19,5 @@ league = League(
     season_nb=config["SEASON_NB"],
     division=config["DIVISION"],
     nb_players=config["NB_PLAYERS"],
-    matchweeks=[1, 2, 3, 4, 5, 6],
+    matchweeks=config["MATCHWEEK"],
 )

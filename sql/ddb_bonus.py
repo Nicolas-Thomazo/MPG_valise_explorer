@@ -1,15 +1,12 @@
-import json
-
 import duckdb
 
 from utils import duckdb_helper
-
-bonus_json_path = "utils/bonus.json"
+from utils.bonus import bonus
+from utils.duckdb_helper import azure_secret
 
 
 def get_json_bonus():
-    with open("utils/bonus.json") as js:
-        return json.load(js)
+    return bonus
 
 
 def get_total_team_bonus_played(team_id: str) -> dict:
@@ -101,13 +98,14 @@ def get_all_players_bonus(league_id, season_nb, nb_players: int):
     start_bonus = bonus[f"{nb_players}_players"]
 
     team_ids = get_all_team_ids(league_id=league_id, season_nb=season_nb)["h_teamid"]
-    print(f"Players ids = {team_ids}")
-    # stop
 
+    full_text = ""
     for team_id in team_ids:
         bonus_played = get_total_team_bonus_played(team_id)
         remaining_bonus = {k: start_bonus.get(k, 0) - bonus_played.get(k, 0) for k in bonus_played}
         # print(f"Remaining bonuses of {team_id.split('_')[2:]} are:")
-        print(f"Remaining bonuses of {'_'.join(team_id.split('_')[2:])} are:")
+        full_text = full_text + f"<p>Remaining bonuses of {'_'.join(team_id.split('_')[2:])} are:"
         for bonus in remaining_bonus:
-            print(f"{bonus} : {remaining_bonus[bonus]}")
+            full_text = full_text + f"{bonus} : {remaining_bonus[bonus]}<br>"
+        full_text = full_text + "</p>"
+    return full_text

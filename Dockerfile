@@ -3,8 +3,11 @@ FROM python:3.10
 COPY /scrap /scrap
 COPY /config /config
 COPY /utils /utils
+COPY /sql /sql
 COPY requirements.txt .
 COPY scrap_league.py .
+COPY get_matchweeks_not_scrapped.py .
+COPY get_all_bonus.py .
 
 #We have to create the folder to be able to write exports files
 RUN mkdir -p /exports
@@ -17,4 +20,4 @@ RUN apt-get update && apt-get install -y wget unzip && \
     rm google-chrome-stable_current_amd64.deb && \
     apt-get clean
 
-CMD ["python", "scrap_league.py"]
+# CMD ["python", "get_all_bonus.py"]

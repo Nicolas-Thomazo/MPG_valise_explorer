@@ -34,7 +34,11 @@ def get_matchweeks_scrapped(league_id, division, season_nb, nb_players):
     GROUP BY matchweek
     HAVING nb_games >= {nb_players/2}
     """
-    full_matchweek_results = duckdb.query(query).fetchnumpy()
+    try:
+        full_matchweek_results = duckdb.query(query).fetchnumpy()
+    except duckdb.IOException:
+        print("No history found.")
+        return []
     return sorted(list(full_matchweek_results["matchweek"]))
 
 
