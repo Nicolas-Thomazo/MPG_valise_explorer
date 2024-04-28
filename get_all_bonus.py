@@ -1,5 +1,5 @@
 from config.config_reader import get_config
-from sql.duckdb_bonus import get_all_players_bonus
+from sql.ddb_bonus import get_all_players_bonus
 from utils.log import init_logger
 
 init_logger()

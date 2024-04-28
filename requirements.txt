@@ -9,3 +9,4 @@ pydantic==2.6.4
 pydantic-settings==2.2.1
 azure-storage-blob==12.19.1
 pandas==2.2.2
+kestra==0.12.0
