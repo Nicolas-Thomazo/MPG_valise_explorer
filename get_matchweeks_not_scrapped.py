@@ -16,5 +16,5 @@ matchweeks_not_scrapped = get_matchweeks_not_scrapped(
 
 
 outputs = {"matchweeks_not_scrapped": matchweeks_not_scrapped}
-print(f"matchweeks_not_scrapped : {matchweeks_not_scrapped}")
+
 Kestra.outputs(outputs)
