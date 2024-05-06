@@ -1,21 +1,7 @@
-1- Ecrire les résultats directement dans Azure
+1- Ajouter un stop du scrapping propre quand on arrive à la première journée pas encore terminée
 
-    a- Comment s'authentifier ?
-    https://learn.microsoft.com/en-us/azure/developer/python/sdk/authentication-azure-hosted-apps?tabs=azure-cli%2Cazure-app-service
+2- Ajouter un drop duplicates à la fin des pipelines ?
 
-    https://learn.microsoft.com/en-us/azure/developer/python/sdk/authentication-local-development-service-principal?source=recommendations&tabs=azure-cli
-    
-    b- Création du storage
+3- Régler les soucis avec le turn on / off de la VM Azure
 
-    c- Lire & Ecrire les fichiers
-
-2- Lancer le script avec Azure
-
-3- Faire une fonction qui check quelles journées ont déjà été scrappées
-
-4- Update les inputs sur Kestra de la bonne manière (en utilisant la fonction du 3-)
-
-5- Nouveau flow pour m'envoyer un mail avec les bonus restants de mon prochain adversaire
-(ou de tout les adversaires ?)
-
-6- Scrapper les transferts
+4- Scrapper les transferts
