@@ -36,14 +36,14 @@ class League:
         self.driver.find_elements(By.XPATH, games_XPATH)[match_element_nb].click()
         return self.driver.current_url
 
-    def scrap_game(self, game_link: str, game_season_nb: int):
+    def scrap_game(self, game_link: str, matchweek: int):
         Game(
             driver=self.driver,
             league_id=self.league_id,
             season_nb=self.season_nb,
             division=self.division,
             game_link=game_link,
-            game_season_nb=game_season_nb,
+            matchweek=matchweek,
         )
 
     def scrap_league(self, matchweeks: list = []):

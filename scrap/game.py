@@ -1,8 +1,7 @@
-import logging
-import time
-from scrap.mpg import MPG
-
 import polars as pl
+
+from scrap.mpg import MPG
+from utils.azure import AzureUtils
 
 pl.Config(tbl_cols=22)
 from selenium.webdriver.common.by import By
@@ -29,22 +28,16 @@ class Game(MPG):
         "zahia",
         "miroir",
         "chapron",
-        "tonton",
+        "tontonpat",
         "decat",
         "5défenseurs",
         "4défenseurs",
-        "capitaine"
+        "capitaine",
+        "4decat",
     ]
 
     export_game_path = "exports/games.parquet"
     export_bonus_path = "exports/bonus.parquet"
-
-    # Unused
-    goals_class = "sc-bcXHqe crTPxA"
-    real_goals_color = "#696773"
-    mpg_goals_color = "#45C945"
-    save_goals_color = "#EF1728"
-
 
     def get_players_info_df(self, scores_tab_element):
         """
@@ -136,6 +129,10 @@ class Game(MPG):
         :param bonus_class: Lowest bonus class level => Giving the name of the bonus directly
         :param bonus_class: Dictionary to update if bonuses are found
         :param home: Is the team home or visitor ?
+
+        TODO: Find a better way to catch out mirror possible problem.
+        => Dès que j'ai un bonus miroir je coupe le comtpe des bonus, mais je rate la récup
+        sur les défenses à 4 et 5 à ce moment là du coup. + méthodo pas folle
         """
         if home:
             prefix = "h_"
@@ -147,8 +144,12 @@ class Game(MPG):
             bonus_name = bonus.find_element(By.TAG_NAME, "p").text.lower().replace(" ", "")
             bonus_name = bonus_name.replace("chapronrouge", "chapron")
             bonus_name = bonus_name.replace("lavaliseànanard", "valise")
+            bonus_name = bonus_name.replace("4-decat'", "4decat")
+            print(self.all_bonus_list)
             if bonus_name in self.all_bonus_list:
                 bonus_dict[f"{prefix}{bonus_name}"] += 1
+                if bonus_name == "miroir":
+                    return bonus_dict
             else:
                 raise ValueError(f"Found an unknown bonus name : {bonus_name}")
         return bonus_dict
@@ -195,16 +196,16 @@ class Game(MPG):
                 "v_real_goals": self.v_real_goals,
                 "v_own_goals": self.v_own_goals,
                 "v_red_cards": self.v_red_cards,
-                "game_season_nb": self.game_season_nb,
+                "matchweek": self.matchweek,
             }
         )
         try:
-            historical_df = pl.read_parquet(self.export_game_path)
+            historical_df = pl.read_parquet(self.AzureUtils.read_file(self.export_game_path))
             df = historical_df.vstack(df)
-        except FileNotFoundError:
+        except TypeError:
             print("No history file found.")
-        df.write_parquet(self.export_game_path)
-        print(df)
+        self.AzureUtils.write_file(data=df, path=self.export_game_path)
+        print(f"Games file now has a lenght of {df.select(pl.count())[0,0]} rows.")
 
     def db_bonus_insert(self):
         """
@@ -221,7 +222,7 @@ class Game(MPG):
                 "h_zahia": self.bonus["h_zahia"],
                 "h_miroir": self.bonus["h_miroir"],
                 "h_chapron": self.bonus["h_chapron"],
-                "h_tonton": self.bonus["h_tonton"],
+                "h_tontonpat": self.bonus["h_tontonpat"],
                 "h_decat": self.bonus["h_decat"],
                 "h_5défenseurs": self.bonus["h_5défenseurs"],
                 "h_4défenseurs": self.bonus["h_4défenseurs"],
@@ -231,19 +232,19 @@ class Game(MPG):
                 "v_zahia": self.bonus["v_zahia"],
                 "v_miroir": self.bonus["v_miroir"],
                 "v_chapron": self.bonus["v_chapron"],
-                "v_tonton": self.bonus["v_tonton"],
+                "v_tontonpat": self.bonus["v_tontonpat"],
                 "v_decat": self.bonus["v_decat"],
                 "v_5défenseurs": self.bonus["v_5défenseurs"],
                 "v_4défenseurs": self.bonus["v_4défenseurs"],
             }
         )
         try:
-            historical_df = pl.read_parquet(self.export_bonus_path)
+            historical_df = pl.read_parquet(self.AzureUtils.read_file(self.export_bonus_path))
             df = historical_df.vstack(df)
-        except FileNotFoundError:
+        except TypeError:
             print("No history file found.")
-        df.write_parquet(self.export_bonus_path)
-        print(df)
+        self.AzureUtils.write_file(data=df, path=self.export_bonus_path)
+        print(f"Bonus file now has a lenght of {df.select(pl.count())[0,0]} rows.")
 
     def __init__(
         self,
@@ -251,7 +252,7 @@ class Game(MPG):
         league_id: str,
         season_nb: int,
         division: int,
-        game_season_nb: int,
+        matchweek: int,
         game_link: str,
     ):
         """
@@ -262,7 +263,7 @@ class Game(MPG):
         :param league_id: MPG league unique ID (eg: 'KWGFGJUM')
         :param season_nb: Season number
         :param division: Division
-        :param game_season_nb: How many matches has it been th
+        :param matchweek: How many matches has it been th
         is season?
         :param game_link: mpg full link
         """
@@ -271,7 +272,8 @@ class Game(MPG):
         self.league_id = league_id
         self.season_nb = season_nb
         self.division = division
-        self.game_season_nb = game_season_nb
+        self.matchweek = matchweek
+        self.AzureUtils = AzureUtils()
 
         get_url(driver=self.driver, url=game_link)
 

@@ -5,7 +5,6 @@ from utils.log import init_logger
 
 init_logger()
 config = get_config()
-print(config)
 Driver = Driver(docker=config["IS_DOCKER"])
 
 # Define your credentials
@@ -20,5 +19,5 @@ league = League(
     season_nb=config["SEASON_NB"],
     division=config["DIVISION"],
     nb_players=config["NB_PLAYERS"],
-    matchweeks=[config["MATCHWEEK"]],
+    matchweeks=config["MATCHWEEK"],
 )

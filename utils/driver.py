@@ -28,7 +28,7 @@ class Driver:
             options=self.chrome_options,
         )
 
-    def accept_cookies(self):
+    def accept_cookies_old(self):
         """_summary_
         Accept cookies to be able to put our logging credentials
         1- Looking for every iframes, as cookies accept button is on an iframe.
@@ -50,6 +50,19 @@ class Driver:
                 logging.info("Cookies not found in this iframe.")
         if not accepted:
             raise NameError("The button to accept cookies was not found.")
+
+    def accept_cookies(self):
+        """_summary_
+        Accept cookies to be able to put our logging credentials
+        1- Try to click on this button for every iframe.
+        2- Raising an error if cookies weren't accepted
+        """
+        accept_button_id = "didomi-notice-agree-button"
+        try:
+            self.driver.find_element(By.ID, accept_button_id).click()
+            logging.info("Bingo, cookies accepted!")
+        except:
+            raise NameError("Couldn't accept cookies.")
 
     def logging(self, user, password):
         """

@@ -1,6 +1,7 @@
 config/config.json
 exports/*
 *.pyc 
+credentials/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -125,6 +126,8 @@ celerybeat.pid
 
 # Environments
 .env
+.env_kdp
+.env_jb
 .venv
 env/
 venv/

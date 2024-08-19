@@ -1,7 +1,7 @@
-1- Déployer le code sur docker
+1- Ajouter un stop du scrapping propre quand on arrive à la première journée pas encore terminée
 
-2- Orchestrer et mettre en place une pipeline (avec Kestra ?)
+2- Ajouter un drop duplicates à la fin des pipelines ?
 
-3- Faire une fonction qui check quelles journées ont déjà été scrappées
+3- Régler les soucis avec le turn on / off de la VM Azure
 
 4- Scrapper les transferts
