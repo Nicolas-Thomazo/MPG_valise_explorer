@@ -1,5 +1,3 @@
-import time
-
 from selenium.webdriver.common.by import By
 
 from scrap.game import Game
@@ -7,6 +5,39 @@ from utils.selenium import get_url
 
 
 class League:
+    def __init__(
+        self,
+        driver,
+        league_id: str,
+        results_link: str,
+        season_nb: str,
+        division: int,
+        nb_players: int,
+        matchweeks: list,
+    ):
+        """
+        Initialise
+
+        Args:
+            driver (_type_): _description_
+            league_id (str): _description_
+            results_link (str): _description_
+            season_nb (str): _description_
+            division (int): _description_
+            nb_players (int): _description_
+            matchweeks (list): _description_
+        """
+        self.driver = driver
+        self.league_id = league_id
+        self.results_link = results_link
+        self.season_nb = season_nb
+        self.division = division
+        self.nb_players = nb_players
+
+        get_url(driver=self.driver, url=results_link)
+
+        self.scrap_league(matchweeks=matchweeks)
+
     def get_driver_matchweek(self) -> int:
         """
         Return on which matchweek driver is pointing
@@ -60,7 +91,6 @@ class League:
         :param matchweeks: list of int of matchweeks to scrap, defaults to []
         """
         matchweeks_scrapped = []
-        games_links = []
         for matchweek in matchweeks:
             for match_element_nb in range(int(self.nb_players / 2)):
                 self.get_driver_to_matchweek(matchweek)
@@ -69,23 +99,3 @@ class League:
             matchweeks_scrapped.append(matchweek)
         print(f"matchweek scrapped : {matchweeks_scrapped}")
 
-    def __init__(
-        self,
-        driver,
-        league_id: str,
-        results_link: str,
-        season_nb: str,
-        division: int,
-        nb_players: int,
-        matchweeks: list,
-    ):
-        self.driver = driver
-        self.league_id = league_id
-        self.results_link = results_link
-        self.season_nb = season_nb
-        self.division = division
-        self.nb_players = nb_players
-
-        get_url(driver=self.driver, url=results_link)
-
-        self.scrap_league(matchweeks=matchweeks)

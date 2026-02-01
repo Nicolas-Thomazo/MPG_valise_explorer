@@ -24,7 +24,7 @@ class Driver:
             self.chrome_options.page_load_strategy = "normal"
 
         self.driver = webdriver.Chrome(
-            service=Service(ChromeDriverManager().install()),
+            # service=Service(ChromeDriverManager().install()),
             options=self.chrome_options,
         )
 

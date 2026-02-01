@@ -1,3 +1,4 @@
+#%%
 from config.config_reader import get_config
 from scrap.league import League
 from utils.driver import Driver
@@ -5,8 +6,9 @@ from utils.log import init_logger
 
 init_logger()
 config = get_config()
-Driver = Driver(docker=config["IS_DOCKER"])
-
+#%%
+Driver = Driver(docker=False)
+#%%
 # Define your credentials
 user = config["MAIL"]
 password = config["PASSWORD"]
@@ -21,3 +23,5 @@ league = League(
     nb_players=config["NB_PLAYERS"],
     matchweeks=config["MATCHWEEK"],
 )
+
+# %%
