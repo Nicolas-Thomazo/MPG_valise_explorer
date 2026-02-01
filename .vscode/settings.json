@@ -1,8 +1,5 @@
 {
-    "editor.defaultFormatter": "ms-python.black-formatter",
-    "[python]": {
-        "editor.defaultFormatter": "ms-python.black-formatter"
-    },
+
     "workbench.colorCustomizations": {
         "activityBar.background": "#1c987d",
         "activityBar.activeBackground": "#1c987d",
@@ -12,4 +9,8 @@
         "menu.background": "#1c987d",
         "statusBarItem.remoteBackground": "#1c987d",
     },
+  "[python]": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "charliermarsh.ruff"
+  }
 }
