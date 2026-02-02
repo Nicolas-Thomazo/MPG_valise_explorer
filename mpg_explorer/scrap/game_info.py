@@ -90,7 +90,7 @@ def extract_bonus_details(card: WebElement) -> str:
 #############################
 
 
-def get_all_bonus(driver: Chrome, timeout: int = 5) -> list[WebElement]:
+def get_all_bonus(driver: Chrome, timeout: int = 10) -> list[WebElement]:
     """
     Retrieves all bonus card WebElements from the page with explicit wait.
     """
@@ -137,6 +137,46 @@ def find_parent_x(card: WebElement) -> float:
     return parent_x
 
 
+def _get_no_bonus_label_x(driver: Chrome) -> Optional[float]:
+    """Checks if the 'No bonus' label is present and returns its X position."""
+    elements = check_if_no_bonus(driver)
+    if elements:
+        return float(elements[0].location["x"])
+    return None
+
+
+def _extract_bonuses_with_positions(
+    cards: list[WebElement],
+) -> tuple[list[str], list[float]]:
+    """
+    Iterates through cards to extract text details and their horizontal positions.
+
+    Args:
+        cards: List of WebElement representing bonus cards.
+
+    Returns:
+        A tuple containing:
+            - A list of bonus detail strings.
+            - A list of corresponding x-coordinates.
+    """
+    bonus_details: list[str] = []
+    x_coords: list[float] = []
+
+    for card in cards:
+        try:
+            x_pos = find_parent_x(card)
+            details = extract_bonus_details(card)
+
+            bonus_details.append(details)
+            x_coords.append(x_pos)
+            print(f"Found bonus: {details} at x={x_pos}")
+            logger.info(f"Found bonus: {details} at x={x_pos}")
+        except Exception as e:
+            logger.warning(f"Failed to process a bonus card: {e}")
+
+    return bonus_details, x_coords
+
+
 ##########################
 #### Logic functions #####
 ##########################
@@ -157,58 +197,94 @@ def find_index_split_bonuses(position_array: NDArray) -> np.integer:
     return index_split
 
 
+def _assign_by_no_bonus_label(
+    home: PlayerResult,
+    away: PlayerResult,
+    bonuses: list[str],
+    x_coords: list[float],
+    no_bonus_x: float,
+) -> tuple[PlayerResult, PlayerResult]:
+    """Assigns all bonuses to one team if the 'No Bonus' label is detected for the other."""
+    if not x_coords:
+        return home, away
+
+    # If the 'No bonus' label is to the right of all existing bonuses
+    if no_bonus_x > max(x_coords):
+        logger.info(f"No bonuses detected for away team: {away.name}")
+        home.list_bonus = bonuses
+        away.list_bonus = []
+    # If the 'No bonus' label is to the left of all existing bonuses
+    elif no_bonus_x < min(x_coords):
+        logger.info(f"No bonuses detected for home team: {home.name}")
+        home.list_bonus = []
+        away.list_bonus = bonuses
+    return home, away
+
+
+def _assign_by_splitting(
+    home: PlayerResult, away: PlayerResult, bonuses: list[str], x_coords: list[float]
+) -> tuple[PlayerResult, PlayerResult]:
+    """Splits the bonus list in two based on the largest gap in X coordinates."""
+    if not x_coords:
+        return home, away
+
+    split_index = find_index_split_bonuses(np.array(x_coords))
+    logger.debug(
+        f"Splitting bonuses at index {split_index} for {home.name}/{away.name}"
+    )
+
+    # Standard slicing: home gets up to split_index, away gets the rest
+    home.list_bonus = bonuses[: split_index + 1]
+    away.list_bonus = bonuses[split_index + 1 :]
+    return home, away
+
+
+###############
+#### Main #####
+###############
+
+
 def get_match_data(driver: Chrome) -> tuple[PlayerResult, PlayerResult]:
     """
-    Main orchestrator to scrape match info and bonuses using location strategy.
+    Orchestrates the scraping of match information and player bonuses.
+    Uses horizontal positioning (X-axis) to attribute bonuses to the correct team.
+
+    Args:
+        driver: The Chrome WebDriver instance.
 
     Returns:
-        A tuple of PlayerResult objects (home_player, outside_player) or None if failed.
+        A tuple containing PlayerResult for home and away players.
     """
     logger.info("Starting match data extraction...")
-    all_cards: list[WebElement] = get_all_bonus(driver)
-    no_bonus_selector = check_if_no_bonus(driver)
-    if no_bonus_selector:
-        position_no_bonus = no_bonus_selector[0].location["x"]
 
+    # 1. Data Collection
+    all_cards = get_all_bonus(driver)
     if not all_cards:
-        msg = "No html found with the actuel selector, maybe the page structure has changed. Cannot proceed to extract match data."
+        msg = "No bonus cards found. Page structure might have changed."
         logger.error(msg)
         raise Exception(msg)
 
-    # 1. Process Header (The first card contains match info)
-    header_card = all_cards[0]
-    home_player, outside_player = parse_match_header(header_card.text)
+    # 2. Header Parsing (First card)
+    home_player, away_player = parse_match_header(all_cards[0].text)
     logger.info(
-        f"Match: {home_player.name} vs {outside_player.name} | Score: {home_player.score} - {outside_player.score}"
+        f"Match: {home_player.name} vs {away_player.name} | Score: {home_player.score}-{away_player.score}"
     )
 
-    # 3. Process Bonus Cards (Skipping the first card which is the header)
-    bonus_cards = all_cards[1:]
-    list_bonuses: list[str] = []
-    list_positions_bonuses: list[float] = []
-    for card in bonus_cards:
-        try:
-            parent_x = find_parent_x(card)
-            bonus_text = extract_bonus_details(card)
-            list_bonuses.append(bonus_text)
-            list_positions_bonuses.append(parent_x)
-            logger.info(f"Found bonus {bonus_text}")
-        except Exception as e:
-            logger.warning(f"Failed to process a bonus card: {e}")
+    # 3. Bonus & Position Extraction (Remaining cards)
+    bonus_list, x_coords = _extract_bonuses_with_positions(all_cards[1:])
 
-    if no_bonus_selector:
-        if position_no_bonus > max(list_positions_bonuses):
-            logger.info(f"No bonuses for outside team {outside_player.name}")
-            home_player.list_bonus = list_bonuses
-        elif position_no_bonus < min(list_positions_bonuses):
-            logger.info(f"No bonuses for home team {home_player.name}")
-            outside_player.list_bonus = list_bonuses
-    else:
-        index_split = find_index_split_bonuses(np.array(list_positions_bonuses))
-        logger.debug(
-            f"Index to split bonuses between teams: {index_split}, bonuses found: {list_bonuses}"
+    # 4. Attribution Logic
+    no_bonus_x = _get_no_bonus_label_x(driver)
+
+    if no_bonus_x is not None:
+        # Case A: One team has explicitly "No bonus"
+        home_player, away_player = _assign_by_no_bonus_label(
+            home_player, away_player, bonus_list, x_coords, no_bonus_x
         )
-        home_player.list_bonus = list_bonuses[:index_split]
-        outside_player.list_bonus = list_bonuses[index_split + 1 :]
+    else:
+        # Case B: Both teams might have bonuses, split the list based on X gap
+        home_player, away_player = _assign_by_splitting(
+            home_player, away_player, bonus_list, x_coords
+        )
 
-    return (home_player, outside_player)
+    return home_player, away_player

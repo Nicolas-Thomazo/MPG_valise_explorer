@@ -1,64 +1,108 @@
-"""End-to-end tests for MPG authentication using Selenium."""
-
 import pytest
 from mpg_explorer.utils.driver import Driver
 from mpg_explorer.scrap.game_info import get_match_data, PlayerResult
 from mpg_explorer import logger
 
 
-@pytest.fixture
-def my_driver():
+@pytest.fixture(scope="module")
+def logged_in_driver():
+    """
+    Fixture that initializes the driver and performs login ONLY ONCE
+    for all tests in this module.
+    """
+    logger.info("Initializing driver and performing one-time login...")
     my_driver = Driver()
-    yield my_driver
-    my_driver.driver.quit()
+    try:
+        my_driver.login_mpg()
+        yield my_driver
+    finally:
+        logger.info("Closing driver after module tests.")
+        my_driver.driver.quit()
 
 
 @pytest.mark.end2end
-def test_mpg_authentication_success(my_driver):
+@pytest.mark.parametrize(
+    "match_url, expected_home, expected_outside",
+    [
+        # Case 1: Rouen vs NIKEU
+        (
+            "https://mpg.football/mpg-match/league/mpg_division_NKU1UAPG_11_1/mpg_division_match_NKU1UAPG_11_1_6_3_3_2",
+            PlayerResult(
+                is_home_team=True,
+                name="FC Rouen Métropole",
+                score=0,
+                list_bonus=["Capitaine", "4 défenseurs", "Cheat Code 18-26"],
+            ),
+            PlayerResult(
+                is_home_team=False,
+                name="NIKEU",
+                score=2,
+                list_bonus=["Capitaine", "4 défenseurs", "Zahia"],
+            ),
+        ),
+        # Case 2: Baptoz vs KABZ (No bonus for away team)
+        (
+            "https://mpg.football/mpg-match/league/mpg_division_NKU1UAPG_11_1/mpg_division_match_NKU1UAPG_11_1_6_1_0_5",
+            PlayerResult(
+                is_home_team=True,
+                name="Baptoz",
+                score=4,
+                list_bonus=["Capitaine", "4 défenseurs", "Zahia"],
+            ),
+            PlayerResult(
+                is_home_team=False,
+                name="KABZ",
+                score=1,
+                list_bonus=[],
+            ),
+        ),
+        # Case 3: No bonus for home and away team
+        (
+            "https://mpg.football/mpg-match/league/mpg_division_NKU1UAPG_11_3/mpg_division_match_NKU1UAPG_11_3_6_1_4_5",
+            PlayerResult(
+                is_home_team=True,
+                name="aymericn10",
+                score=2,
+                list_bonus=[],
+            ),
+            PlayerResult(
+                is_home_team=False,
+                name="Tchouinamax",
+                score=5,
+                list_bonus=[],
+            ),
+        ),
+    ],
+)
+def test_mpg_match_data_extraction(
+    logged_in_driver, match_url, expected_home, expected_outside
+):
     """
     End-to-end test:
-        - Logs into MPG website
-        - Navigates to a specific match page
-        - Extracts match data including team names, scores, and bonuses
-        - Validates the extracted data against expected values
+        - Logs into MPG
+        - Navigates to a parametrized match URL
+        - Validates extracted PlayerResult (Home & Outside) against expected data
     """
-    driver = my_driver.driver
+    driver = logged_in_driver.driver
 
-    expected_home_player = PlayerResult(
-        is_home_team=True,
-        name="FC Rouen Métropole",
-        score=0,
-        list_bonus=["Capitaine", "4 défenseurs"],
+    logger.info(f"Navigating to match: {match_url}")
+    driver.get(match_url)
+
+    # Execution
+    home_player, outside_player = get_match_data(driver)
+
+    # Assertions for Home Player
+    assert home_player.name == expected_home.name
+    assert home_player.score == expected_home.score
+    assert home_player.list_bonus == expected_home.list_bonus
+    assert home_player.is_home_team is True
+
+    # Assertions for Outside Player
+    assert outside_player.name == expected_outside.name
+    assert outside_player.score == expected_outside.score
+    assert outside_player.list_bonus == expected_outside.list_bonus
+    assert outside_player.is_home_team is False
+
+    logger.info(
+        f"Validation successful for {home_player.name} vs {outside_player.name}"
     )
-    expected_outside_player = PlayerResult(
-        is_home_team=False,
-        name="NIKEU",
-        score=2,
-        list_bonus=["Capitaine", "4 défenseurs", "Zahia"],
-    )
-    try:
-        my_driver.login_mpg()
-        my_driver.driver.get(
-            "https://mpg.football/mpg-match/league/mpg_division_NKU1UAPG_11_1/mpg_division_match_NKU1UAPG_11_1_6_3_3_2"
-        )
-        home_player, outside_player = get_match_data(my_driver.driver)
-        assert isinstance(home_player, PlayerResult), (
-            "home_player is not a PlayerResult"
-        )
-        assert isinstance(outside_player, PlayerResult), (
-            "outside_player is not a PlayerResult"
-        )
-
-        assert home_player == expected_home_player, (
-            f"home_player data does not match expected values. Expected: {expected_home_player}, Got: {home_player}"
-        )
-        assert outside_player == expected_outside_player, (
-            f"outside_player data does not match expected values. Expected: {expected_outside_player}, Got: {outside_player}"
-        )
-
-    except Exception as e:
-        logger.error(f"Error while extracting match data: {e}")
-        assert False, f"Test failed due to error: {e}"
-
-    finally:
-        driver.quit()
