@@ -16,7 +16,7 @@ class Driver:
     def __init__(self, docker=True) -> None:
         if docker:
             self.chrome_options.add_argument("--no-sandbox")
-            self.chrome_options.add_argument("--headless=new")
+            # self.chrome_options.add_argument("--headless=new")
             self.chrome_options.add_argument("--disable-dev-shm-usage")
             self.chrome_options.page_load_strategy = "normal"
 
@@ -30,13 +30,12 @@ class Driver:
         1- Try to click on this button for every iframe.
         2- Raising an error if cookies weren't accepted
         """
-        accept_button_id = "didomi-notice-agree-button"
         try:
+            accept_button_id = "didomi-notice-agree-button"
             self.driver.find_element(By.ID, accept_button_id).click()
             logging.info("Bingo, cookies accepted!")
-        except Exception as e:
-            logging.error(f"Error accepting cookies: {e}")
-            raise NameError("Couldn't accept cookies.")
+        except Exception:
+            logging.info("No cookie banner detected, continuing")
 
     def login_mpg(self, user: str, password: str):
         """

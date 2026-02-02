@@ -4,27 +4,30 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class LeagueConfig(BaseSettings):
+    """Configuration loaded from environment variables."""
+
     model_config = SettingsConfigDict(
-        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
     )
 
-    # CREDENTIALS
-    MPG_USERNAME: str = Field(env="MPG_USERNAME")
-    MPG_PASSWORD: str = Field(env="MPG_PASSWORD")
+    # --- CREDENTIALS ---
+    MPG_USERNAME: str
+    MPG_PASSWORD: str
 
-    # LEAGUE CONFIG
-    LEAGUE_ID: str = Field(env="LEAGUE_ID")
-    TEAM_NAME: str = Field(env="TEAM_NAME")
-    SEASON_NUMBER: int = Field(env="SEASON_NUMBER")
-    DIVISION: int = Field(env="DIVISION")
-    NUMBER_PLAYERS: int = Field(env="NUMBER_PLAYERS")
+    # --- LEAGUE CONFIG ---
+    LEAGUE_ID: str
+    TEAM_NAME: str
+    SEASON_NUMBER: int
+    DIVISION: int
+    NUMBER_PLAYERS: int
 
-    # CONFIG
-    IS_DOCKER: bool = Field(default=True, env="IS_DOCKER")
-    MATCHWEEK: list = Field(default=[1], env="MATCHWEEK")
-    AZURE_STORAGE_CONNECTION_STRING: str | None = Field(
-        default=None, env="AZURE_STORAGE_CONNECTION_STRING"
-    )
+    # --- CONFIG ---
+    IS_DOCKER: bool = True
+    MATCHWEEK: list[int] = [1]
+
+    AZURE_STORAGE_CONNECTION_STRING: str | None = None
 
     @computed_field
     @property
