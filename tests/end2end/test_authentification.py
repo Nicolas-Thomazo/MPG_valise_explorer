@@ -6,7 +6,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
-from mpg_explorer import LEAGUE_CONFIG
+from mpg_explorer import LEAGUE_CONFIG, logger
 from mpg_explorer.utils.driver import Driver
 
 
@@ -30,7 +30,7 @@ def test_mpg_authentication_success(my_driver):
     password = LEAGUE_CONFIG.MPG_PASSWORD
 
     driver = my_driver.driver
-    print(f"Navigating to MPG login page: {my_driver.url}")
+    logger.info(f"Navigating to MPG login page: {my_driver.url}")
     try:
         my_driver.login_mpg(user=user, password=password)
 

@@ -7,6 +7,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+from mpg_explorer import LEAGUE_CONFIG
 
 
 class Driver:
@@ -37,7 +38,11 @@ class Driver:
         except Exception:
             logging.info("No cookie banner detected, continuing")
 
-    def login_mpg(self, user: str, password: str):
+    def login_mpg(
+        self,
+        user: str = LEAGUE_CONFIG.MPG_USERNAME,
+        password: str = LEAGUE_CONFIG.MPG_PASSWORD,
+    ):
         """
         Log in user.
             1- Getting base URL
