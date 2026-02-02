@@ -145,7 +145,7 @@ def find_index_split_bonuses(position_array: NDArray) -> np.integer:
     return index_split
 
 
-def get_match_data(driver: Chrome) -> Optional[tuple[PlayerResult, PlayerResult]]:
+def get_match_data(driver: Chrome) -> tuple[PlayerResult, PlayerResult]:
     """
     Main orchestrator to scrape match info and bonuses using location strategy.
 

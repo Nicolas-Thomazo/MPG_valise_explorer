@@ -1,6 +1,5 @@
 """Module to scrap league data from MPG website."""
 
-
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 
@@ -43,7 +42,6 @@ class LeagueScrapper:
         self.nb_players = nb_players
 
         self.driver.get(self.results_link)
-        self.scrap_league(matchweeks=matchweeks)
 
     def scrap_league(self, matchweeks: list = []):
         """
@@ -65,6 +63,7 @@ class LeagueScrapper:
             list_matchs_urls: list[str] = self.iterate_on_matchs(matchweek=matchweek)
             matchweeks_scrapped.append(matchweek)
         logger.info(f"matchweek scrapped : {matchweeks_scrapped} {list_matchs_urls}")
+        return list_matchs_urls
 
     def iterate_on_matchs(self, matchweek: int) -> list[str]:
         """
@@ -106,14 +105,7 @@ class LeagueScrapper:
         score.click()
         match_url = self.driver.current_url
         try:
-            Game(
-                driver=self.driver,
-                league_id=self.league_id,
-                season_nb=self.season_nb,
-                division=self.division,
-                game_link=match_url,
-                matchweek=matchweek,
-            )
+            Game(driver=self.driver, game_url=match_url, matchweek=matchweek)
         except Exception as exc:
             logger.error(f"Error while scraping match {match_url} : {exc}")
         finally:
