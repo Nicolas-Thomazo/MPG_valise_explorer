@@ -24,7 +24,7 @@ class PlayerResult(BaseModel):
 
 
 BONUS_PATH = "//div[button[.//img] and div/p]"
-
+NO_BONUS_PATH = "//*[normalize-space(text())='Pas de bonus pour cette journée']"
 
 ############################
 #### Parsing functions #####
@@ -90,7 +90,7 @@ def extract_bonus_details(card: WebElement) -> str:
 #############################
 
 
-def get_all_bonus_cards(driver: Chrome, timeout: int = 5) -> list[WebElement]:
+def get_all_bonus(driver: Chrome, timeout: int = 5) -> list[WebElement]:
     """
     Retrieves all bonus card WebElements from the page with explicit wait.
     """
@@ -103,6 +103,18 @@ def get_all_bonus_cards(driver: Chrome, timeout: int = 5) -> list[WebElement]:
         return all_cards
     except Exception as e:
         logger.error(f"Timeout waiting for bonus cards: {e}")
+        return []
+
+
+def check_if_no_bonus(driver: Chrome, timeout: int = 5) -> list[WebElement]:
+    """
+    Retrieves all bonus card WebElements from the page with explicit wait.
+    """
+    try:
+        results: list[WebElement] = driver.find_elements(By.XPATH, NO_BONUS_PATH)
+        return results
+    except Exception as e:
+        logger.error(f"Timeout waiting for no bonus cards: {e}")
         return []
 
 
@@ -153,7 +165,10 @@ def get_match_data(driver: Chrome) -> tuple[PlayerResult, PlayerResult]:
         A tuple of PlayerResult objects (home_player, outside_player) or None if failed.
     """
     logger.info("Starting match data extraction...")
-    all_cards: list[WebElement] = get_all_bonus_cards(driver)
+    all_cards: list[WebElement] = get_all_bonus(driver)
+    no_bonus_selector = check_if_no_bonus(driver)
+    if no_bonus_selector:
+        position_no_bonus = no_bonus_selector[0].location["x"]
 
     if not all_cards:
         msg = "No html found with the actuel selector, maybe the page structure has changed. Cannot proceed to extract match data."
@@ -181,8 +196,19 @@ def get_match_data(driver: Chrome) -> tuple[PlayerResult, PlayerResult]:
         except Exception as e:
             logger.warning(f"Failed to process a bonus card: {e}")
 
-    index_split = find_index_split_bonuses(np.array(list_positions_bonuses))
-    home_player.list_bonus = list_bonuses[:index_split]
-    outside_player.list_bonus = list_bonuses[index_split + 1 :]
+    if no_bonus_selector:
+        if position_no_bonus > max(list_positions_bonuses):
+            logger.info(f"No bonuses for outside team {outside_player.name}")
+            home_player.list_bonus = list_bonuses
+        elif position_no_bonus < min(list_positions_bonuses):
+            logger.info(f"No bonuses for home team {home_player.name}")
+            outside_player.list_bonus = list_bonuses
+    else:
+        index_split = find_index_split_bonuses(np.array(list_positions_bonuses))
+        logger.debug(
+            f"Index to split bonuses between teams: {index_split}, bonuses found: {list_bonuses}"
+        )
+        home_player.list_bonus = list_bonuses[:index_split]
+        outside_player.list_bonus = list_bonuses[index_split + 1 :]
 
     return (home_player, outside_player)
