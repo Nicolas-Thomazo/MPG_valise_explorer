@@ -1,81 +1,49 @@
+"""Module to scrap league data from MPG website."""
+
+
+from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.by import By
 
-from scrap.game import Game
-from utils.selenium import get_url
+from mpg_explorer.scrap.game import Game
+from selenium.webdriver.support import expected_conditions as EC
+
+from mpg_explorer import logger, LEAGUE_CONFIG
+from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
+from selenium.webdriver import Chrome
 
 
-class League:
+class LeagueScrapper:
     def __init__(
         self,
-        driver,
-        league_id: str,
-        results_link: str,
-        season_nb: str,
-        division: int,
-        nb_players: int,
-        matchweeks: list,
+        driver: Chrome,
+        league_id: str = LEAGUE_CONFIG.LEAGUE_ID,
+        result_link: str = LEAGUE_CONFIG.RESULT_LINK,
+        season_nb: int = LEAGUE_CONFIG.SEASON_NUMBER,
+        division: int = LEAGUE_CONFIG.DIVISION,
+        nb_players: int = LEAGUE_CONFIG.NUMBER_PLAYERS,
+        matchweeks: list = LEAGUE_CONFIG.MATCHWEEK,
     ):
         """
-        Initialise
+        Initialise League scrapper class
 
         Args:
-            driver (_type_): _description_
-            league_id (str): _description_
-            results_link (str): _description_
-            season_nb (str): _description_
-            division (int): _description_
-            nb_players (int): _description_
-            matchweeks (list): _description_
+            driver (Chrome): Chrome driver
+            league_id (str): Id of the mpg league
+            results_link (str): Link of the results page of one week of the league
+            season_nb (str): Number of the season in the league
+            division (int): Division of the league
+            nb_players (int): Number of players in the league
+            matchweeks (list): List of matchweeks to scrap
         """
         self.driver = driver
         self.league_id = league_id
-        self.results_link = results_link
+        self.results_link = result_link
         self.season_nb = season_nb
         self.division = division
         self.nb_players = nb_players
 
-        get_url(driver=self.driver, url=results_link)
-
+        self.driver.get(self.results_link)
         self.scrap_league(matchweeks=matchweeks)
-
-    def get_driver_matchweek(self) -> int:
-        """
-        Return on which matchweek driver is pointing
-        matchweek_string ex : "Résultat J.5 /14"
-        """
-        matchweek_string = self.driver.find_element(By.XPATH, f"//*[@class='sc-dkrFOg iKscri']").text
-        return int(matchweek_string.split(".")[1].split("/")[0].strip())
-
-    def get_driver_to_matchweek(self, matchweek: int):
-        """
-        Switch driver to the previous or next matchweek
-
-        :param next: switch to next matchweek if true, previous otherwise, defaults to True
-        """
-        get_url(driver=self.driver, url=self.results_link)
-
-        button_XPATH = "//*[@class='sc-ipEyDJ sc-hLirLb xQelv ciiqSe']"
-        while self.get_driver_matchweek() != matchweek:
-            self.driver.find_elements(By.XPATH, button_XPATH)[1].click()
-
-    def get_match_element_url(self, match_element_nb: int) -> str:
-        """
-        Click on the n-th match element on the current driver page
-        Returns the game link url
-        """
-        games_XPATH = "//*[@class='sc-bcXHqe sc-gswNZR kondVZ cjNVfZ']"
-        self.driver.find_elements(By.XPATH, games_XPATH)[match_element_nb].click()
-        return self.driver.current_url
-
-    def scrap_game(self, game_link: str, matchweek: int):
-        Game(
-            driver=self.driver,
-            league_id=self.league_id,
-            season_nb=self.season_nb,
-            division=self.division,
-            game_link=game_link,
-            matchweek=matchweek,
-        )
 
     def scrap_league(self, matchweeks: list = []):
         """
@@ -88,14 +56,111 @@ class League:
             3- If the current matchweek is in the list,
                 or if matchweek is empty (meaning we want to scrap all games), we scrap it.
 
-        :param matchweeks: list of int of matchweeks to scrap, defaults to []
+        Args:
+            matchweeks (list, optional): list of int of matchweeks to scrap, defaults to []
         """
+        logger.info(f"Starting league scraping for league id {self.league_id}")
         matchweeks_scrapped = []
         for matchweek in matchweeks:
-            for match_element_nb in range(int(self.nb_players / 2)):
-                self.get_driver_to_matchweek(matchweek)
-                game_link = self.get_match_element_url(match_element_nb)
-                self.scrap_game(game_link, matchweek)
+            list_matchs_urls: list[str] = self.iterate_on_matchs(matchweek=matchweek)
             matchweeks_scrapped.append(matchweek)
-        print(f"matchweek scrapped : {matchweeks_scrapped}")
+        logger.info(f"matchweek scrapped : {matchweeks_scrapped} {list_matchs_urls}")
 
+    def iterate_on_matchs(self, matchweek: int) -> list[str]:
+        """
+        Iterate on every matchs of a given matchweek and scrap them.
+
+        Args:
+            driver (Chrome): selenium driver
+            matchweek (int): matchweek number to scrap
+
+        Returns:
+            list[str]: List of URLs of the scrapped matches
+        """
+        list_matchs_urls: list[str] = []
+        scores = wait_for_scores(self.driver)
+        logger.info(f"Found {len(scores)} scores")
+
+        for index in range(len(scores)):
+            try:
+                score = scores[index]
+                logger.info("Going back to previous page")
+                match_url = self.scrape_matchweek(matchweek=matchweek, score=score)
+                list_matchs_urls.append(match_url)
+            except (StaleElementReferenceException, TimeoutException) as exc:
+                logger.warning(f"Score {index} ignore: {exc}")
+                continue
+
+        logger.info(f"Scrapped {len(list_matchs_urls)} matchs")
+        return list_matchs_urls
+
+    def scrape_matchweek(self, matchweek: int, score):
+        """
+        Scrape a match from a given matchweek.
+
+        Args:
+            driver (Chrome): selenium driver
+            matchweek (int): matchweek number to scrap
+        """
+        WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(score))
+        score.click()
+        match_url = self.driver.current_url
+        try:
+            Game(
+                driver=self.driver,
+                league_id=self.league_id,
+                season_nb=self.season_nb,
+                division=self.division,
+                game_link=match_url,
+                matchweek=matchweek,
+            )
+        except Exception as exc:
+            logger.error(f"Error while scraping match {match_url} : {exc}")
+        finally:
+            self.driver.back()
+
+        score_xpath = get_button_score_balise()
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, score_xpath))
+        )
+        return match_url
+
+
+##########################
+#### Helper functions ####
+##########################
+
+
+def get_button_score_balise():
+    """
+    Get balise of score inside the result page.
+
+    Returns:
+        str: The XPath of the score element
+    """
+    DIGITS = "0123456789"
+    ALLOWED_SCORE_CHARS = f"{DIGITS} -"
+
+    HAS_DASH_SEPARATOR = "contains(normalize-space(.), ' - ')"
+    ONLY_ALLOWED_CHARS = (
+        f"string-length(translate(normalize-space(.), '{ALLOWED_SCORE_CHARS}', '')) = 0"
+    )
+    SCORE_P_XPATH: str = f"//p[{HAS_DASH_SEPARATOR} and {ONLY_ALLOWED_CHARS}]"
+    return SCORE_P_XPATH
+
+
+def wait_for_scores(driver: Chrome, timeout: int = 10) -> list:
+    """
+    Wait until score elements are present in the DOM.
+
+    Args:
+        driver (Chrome): selenium driver
+        timeout (int, optional): Maximum time to wait. Defaults to 10.
+
+    Returns:
+        list: List of score elements found in the DOM
+    """
+    score_xpath = get_button_score_balise()
+    return WebDriverWait(driver, timeout).until(
+        EC.presence_of_all_elements_located((By.XPATH, score_xpath))
+    )

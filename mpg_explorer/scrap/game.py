@@ -1,12 +1,12 @@
+from IPython.terminal.pt_inputhooks.osx import C
 import polars as pl
 
-from scrap.mpg import MPG
-from utils.azure import AzureUtils
+from mpg_explorer.scrap.mpg import MPG
+from mpg_explorer.utils.azure import AzureUtils
+from selenium.webdriver.common.by import By
+from selenium.webdriver import Chrome
 
 pl.Config(tbl_cols=22)
-from selenium.webdriver.common.by import By
-
-from utils.selenium import get_url
 
 
 class Game(MPG):
@@ -38,6 +38,63 @@ class Game(MPG):
 
     export_game_path = "exports/games.parquet"
     export_bonus_path = "exports/bonus.parquet"
+
+    def __init__(
+        self,
+        driver: Chrome,
+        league_id: str,
+        season_nb: int,
+        division: int,
+        matchweek: int,
+        game_link: str,
+    ):
+        """
+        Initialise Game scrapper class
+
+        TODO: Add a check on game id, if game is already in base, stop processing.
+
+
+        Args:
+            driver (Chrome): Selenium driver
+            league_id (str): Id of the mpg league
+            season_nb (str): Number of the season in the league
+            division (int): Division of the league
+            matchweeks (list): List of matchweeks to scrap
+        """
+        self.driver = driver
+        self.game_link = game_link
+        self.league_id = league_id
+        self.season_nb = season_nb
+        self.division = division
+        self.matchweek = matchweek
+        self.AzureUtils = AzureUtils()
+
+        if self.driver.current_url != game_link:
+            self.driver.get(game_link)
+
+        self.tab_info = self.get_score_tab_info()
+
+        self.game_id = self.create_game_id()
+        self.h_team_id = self.get_team_id(home=True)
+        self.v_team_id = self.get_team_id(home=False)
+        self.h_total_goals = (
+            self.tab_info["h_mpg_goals"] + self.tab_info["h_real_goals"]
+        )
+        self.h_mpg_goals = self.tab_info["h_mpg_goals"]
+        self.h_real_goals = self.tab_info["h_real_goals"]
+        self.h_own_goals = 0
+        self.h_red_cards = 0
+        self.v_total_goals = (
+            self.tab_info["v_mpg_goals"] + self.tab_info["v_real_goals"]
+        )
+        self.v_mpg_goals = self.tab_info["v_mpg_goals"]
+        self.v_real_goals = self.tab_info["v_real_goals"]
+        self.v_own_goals = 0
+        self.v_red_cards = 0
+        self.db_game_insert()
+
+        self.bonus = self.get_bonus_info()
+        self.db_bonus_insert()
 
     def get_players_info_df(self, scores_tab_element):
         """
@@ -72,39 +129,58 @@ class Game(MPG):
                 scorers_class = self.v_scorers_class
 
             for scorer in scores_tab_element.find_elements(
-                By.XPATH, f"//*[@class='sc-bcXHqe drrRfn'][1]//*[@class='{goals_class}']//*[@class='{scorers_class}']"
+                By.XPATH,
+                f"//*[@class='sc-bcXHqe drrRfn'][1]//*[@class='{goals_class}']//*[@class='{scorers_class}']",
             ):
                 scorer_infos = {}
                 scorer_infos["name"] = scorer.find_elements(By.TAG_NAME, "p")[1].text
-                scorer_infos["real_goals"] = len(scorer.find_elements(By.TAG_NAME, "svg"))
+                scorer_infos["real_goals"] = len(
+                    scorer.find_elements(By.TAG_NAME, "svg")
+                )
                 scorer_infos["team"] = team
                 players_info.append(scorer_infos)
 
-        df_players_info = pl.DataFrame(players_info, schema=["name", "real_goals", "mpg_goals", "own_goals", "team"])
+        df_players_info = pl.DataFrame(
+            players_info,
+            schema=["name", "real_goals", "mpg_goals", "own_goals", "team"],
+        )
         # Fill null, might be a better way to do that
-        df_players_info = df_players_info.with_columns(pl.col("real_goals", "mpg_goals", "own_goals").fill_null(0))
-        return df_players_info.filter(pl.col("team") == "home"), df_players_info.filter(pl.col("team") == "visitor")
+        df_players_info = df_players_info.with_columns(
+            pl.col("real_goals", "mpg_goals", "own_goals").fill_null(0)
+        )
+        return df_players_info.filter(pl.col("team") == "home"), df_players_info.filter(
+            pl.col("team") == "visitor"
+        )
 
     def get_score_tab_info(self):
         """
         Taking all infos in the score table of a game
+
         1- Finding the tab element by class
         2- Taking all "p" tag elements
         3- Returning a dictionnary with all informations
         """
-        tableau_scores = self.driver.find_element(By.XPATH, f"//*[@class='{self.tab_info_class}']")
+        tableau_scores = self.driver.find_element(
+            By.XPATH, f"//*[@class='{self.tab_info_class}']"
+        )
         df_h_players_info, df_v_players_info = self.get_players_info_df(tableau_scores)
 
         tab_info = {}
-        teams = tableau_scores.find_elements(By.XPATH, f"//*[@class='sc-dkrFOg sc-hbqYmb gappF ePpVLH']")
+        teams = tableau_scores.find_elements(
+            By.XPATH, f"//*[@class='sc-dkrFOg sc-hbqYmb gappF ePpVLH']"
+        )
         tab_info["h_team"] = teams[0].text.replace(" ", "_")
         tab_info["v_team"] = teams[1].text.replace(" ", "_")
 
-        players = tableau_scores.find_elements(By.XPATH, f"//*[@class='sc-dkrFOg dciwac']")
+        players = tableau_scores.find_elements(
+            By.XPATH, f"//*[@class='sc-dkrFOg dciwac']"
+        )
         tab_info["h_player"] = players[0].text.replace(" ", "_")
         tab_info["v_player"] = players[3].text.replace(" ", "_")
 
-        score = tableau_scores.find_element(By.XPATH, f"//*[@class='sc-dkrFOg sc-jTjUTQ dfVVDa ibfwxi']").text
+        score = tableau_scores.find_element(
+            By.XPATH, f"//*[@class='sc-dkrFOg sc-jTjUTQ dfVVDa ibfwxi']"
+        ).text
         tab_info["h_score"] = int(score.split(" ")[0])
         tab_info["v_score"] = int(score.split(" ")[2])
 
@@ -141,7 +217,9 @@ class Game(MPG):
 
         all_bonus = self.driver.find_elements(By.XPATH, f"//*[@class='{bonus_class}']")
         for bonus in all_bonus:
-            bonus_name = bonus.find_element(By.TAG_NAME, "p").text.lower().replace(" ", "")
+            bonus_name = (
+                bonus.find_element(By.TAG_NAME, "p").text.lower().replace(" ", "")
+            )
             bonus_name = bonus_name.replace("chapronrouge", "chapron")
             bonus_name = bonus_name.replace("lavaliseànanard", "valise")
             bonus_name = bonus_name.replace("4-decat'", "4decat")
@@ -168,8 +246,12 @@ class Game(MPG):
             for bonus in self.all_bonus_list:
                 bonus_dict[f"{t}_{bonus.replace(' ', '')}"] = 0
 
-        bonus_dict = self.extract_bonus_from_class(bonus_class=self.h_bonus_class, bonus_dict=bonus_dict, home=True)
-        bonus_dict = self.extract_bonus_from_class(bonus_class=self.v_bonus_class, bonus_dict=bonus_dict, home=False)
+        bonus_dict = self.extract_bonus_from_class(
+            bonus_class=self.h_bonus_class, bonus_dict=bonus_dict, home=True
+        )
+        bonus_dict = self.extract_bonus_from_class(
+            bonus_class=self.v_bonus_class, bonus_dict=bonus_dict, home=False
+        )
         return bonus_dict
 
     def db_game_insert(self):
@@ -200,12 +282,14 @@ class Game(MPG):
             }
         )
         try:
-            historical_df = pl.read_parquet(self.AzureUtils.read_file(self.export_game_path))
+            historical_df = pl.read_parquet(
+                self.AzureUtils.read_file(self.export_game_path)
+            )
             df = historical_df.vstack(df)
         except TypeError:
             print("No history file found.")
         self.AzureUtils.write_file(data=df, path=self.export_game_path)
-        print(f"Games file now has a lenght of {df.select(pl.count())[0,0]} rows.")
+        print(f"Games file now has a lenght of {df.select(pl.count())[0, 0]} rows.")
 
     def db_bonus_insert(self):
         """
@@ -239,60 +323,11 @@ class Game(MPG):
             }
         )
         try:
-            historical_df = pl.read_parquet(self.AzureUtils.read_file(self.export_bonus_path))
+            historical_df = pl.read_parquet(
+                self.AzureUtils.read_file(self.export_bonus_path)
+            )
             df = historical_df.vstack(df)
         except TypeError:
             print("No history file found.")
         self.AzureUtils.write_file(data=df, path=self.export_bonus_path)
-        print(f"Bonus file now has a lenght of {df.select(pl.count())[0,0]} rows.")
-
-    def __init__(
-        self,
-        driver,
-        league_id: str,
-        season_nb: int,
-        division: int,
-        matchweek: int,
-        game_link: str,
-    ):
-        """
-
-        TODO: Add a check on game id, if game is already in base, stop processing.
-
-        :param driver: Selenium driver
-        :param league_id: MPG league unique ID (eg: 'KWGFGJUM')
-        :param season_nb: Season number
-        :param division: Division
-        :param matchweek: How many matches has it been th
-        is season?
-        :param game_link: mpg full link
-        """
-        self.driver = driver
-        self.game_link = game_link
-        self.league_id = league_id
-        self.season_nb = season_nb
-        self.division = division
-        self.matchweek = matchweek
-        self.AzureUtils = AzureUtils()
-
-        get_url(driver=self.driver, url=game_link)
-
-        self.tab_info = self.get_score_tab_info()
-
-        self.game_id = self.create_game_id()
-        self.h_team_id = self.get_team_id(home=True)
-        self.v_team_id = self.get_team_id(home=False)
-        self.h_total_goals = self.tab_info["h_mpg_goals"] + self.tab_info["h_real_goals"]
-        self.h_mpg_goals = self.tab_info["h_mpg_goals"]
-        self.h_real_goals = self.tab_info["h_real_goals"]
-        self.h_own_goals = 0
-        self.h_red_cards = 0
-        self.v_total_goals = self.tab_info["v_mpg_goals"] + self.tab_info["v_real_goals"]
-        self.v_mpg_goals = self.tab_info["v_mpg_goals"]
-        self.v_real_goals = self.tab_info["v_real_goals"]
-        self.v_own_goals = 0
-        self.v_red_cards = 0
-        self.db_game_insert()
-
-        self.bonus = self.get_bonus_info()
-        self.db_bonus_insert()
+        print(f"Bonus file now has a lenght of {df.select(pl.count())[0, 0]} rows.")
