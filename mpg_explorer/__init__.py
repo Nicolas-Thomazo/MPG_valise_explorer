@@ -29,15 +29,18 @@ class LeagueConfig(BaseSettings):
 
     AZURE_STORAGE_CONNECTION_STRING: str | None = None
 
-    @computed_field
-    @property
-    def RESULT_LINK(self) -> str:
-        """URL to the results page of the configured league."""
-        return (
-            f"https://mpg.football/league/mpg_league_{self.LEAGUE_ID}"
-            f"/mpg_division_{self.LEAGUE_ID}_"
-            f"{self.SEASON_NUMBER}_{self.DIVISION}/results"
-        )
+    # @computed_field
+    # @property
+    # def RESULT_LINK(self) -> str:
+    #     """URL to the results page of the configured league."""
+    #     return (
+    #         f"https://mpg.football/league/mpg_league_{self.LEAGUE_ID}"
+    #         f"/mpg_division_{self.LEAGUE_ID}_"
+    #         f"{self.SEASON_NUMBER}_{self.DIVISION}/results"
+    #     )
+
+
+
 
 
 LEAGUE_CONFIG = LeagueConfig()

@@ -1,18 +1,20 @@
-from IPython.terminal.pt_inputhooks.osx import C
-import polars as pl
+"""Module to scrap game data from MPG website."""
 
+import polars as pl
+# from mpg_explorer.models.match import Match
 from mpg_explorer.scrap.mpg import MPG
 from mpg_explorer.utils.azure import AzureUtils
 from selenium.webdriver.common.by import By
 from selenium.webdriver import Chrome
+from mpg_explorer import LEAGUE_CONFIG
 
 pl.Config(tbl_cols=22)
 
 
 class Game(MPG):
     # Tab info
-    tab_info_class = "sc-bcXHqe euGzhE"
-    tab_info_class = "sc-bcXHqe sc-dmctIk gmwvWu jMJMOc"  ### Permet d'avoir toutes les infos dans le panneau (dont le numéro de la journée et les buteurs)
+    # tab_info_class = "sc-bcXHqe euGzhE"
+    # tab_info_class = "sc-bcXHqe sc-dmctIk gmwvWu jMJMOc"  ### Permet d'avoir toutes les infos dans le panneau (dont le numéro de la journée et les buteurs)
     h_goals_class = "sc-bcXHqe fNHVxg"
     h_scorers_class = "sc-bcXHqe gnMozL"
     v_goals_class = "sc-bcXHqe gFNZhX"
@@ -42,11 +44,11 @@ class Game(MPG):
     def __init__(
         self,
         driver: Chrome,
-        league_id: str,
-        season_nb: int,
-        division: int,
+        game_url: str,
         matchweek: int,
-        game_link: str,
+        league_id: str = LEAGUE_CONFIG.LEAGUE_ID,
+        season_nb: int = LEAGUE_CONFIG.SEASON_NUMBER,
+        division: int = LEAGUE_CONFIG.DIVISION,
     ):
         """
         Initialise Game scrapper class
@@ -59,42 +61,42 @@ class Game(MPG):
             league_id (str): Id of the mpg league
             season_nb (str): Number of the season in the league
             division (int): Division of the league
-            matchweeks (list): List of matchweeks to scrap
+            matchweek (int): Matchweek number to scrap
         """
         self.driver = driver
-        self.game_link = game_link
+        self.game_link = game_url
         self.league_id = league_id
         self.season_nb = season_nb
         self.division = division
         self.matchweek = matchweek
-        self.AzureUtils = AzureUtils()
+        # self.AzureUtils = AzureUtils()
 
-        if self.driver.current_url != game_link:
-            self.driver.get(game_link)
+        if self.driver.current_url != game_url:
+            self.driver.get(game_url)
 
-        self.tab_info = self.get_score_tab_info()
+        # self.tab_info = self.get_score_tab_info()
 
-        self.game_id = self.create_game_id()
-        self.h_team_id = self.get_team_id(home=True)
-        self.v_team_id = self.get_team_id(home=False)
-        self.h_total_goals = (
-            self.tab_info["h_mpg_goals"] + self.tab_info["h_real_goals"]
-        )
-        self.h_mpg_goals = self.tab_info["h_mpg_goals"]
-        self.h_real_goals = self.tab_info["h_real_goals"]
-        self.h_own_goals = 0
-        self.h_red_cards = 0
-        self.v_total_goals = (
-            self.tab_info["v_mpg_goals"] + self.tab_info["v_real_goals"]
-        )
-        self.v_mpg_goals = self.tab_info["v_mpg_goals"]
-        self.v_real_goals = self.tab_info["v_real_goals"]
-        self.v_own_goals = 0
-        self.v_red_cards = 0
-        self.db_game_insert()
+        # self.game_id = self.create_game_id()
+        # self.h_team_id = self.get_team_id(home=True)
+        # self.v_team_id = self.get_team_id(home=False)
+        # self.h_total_goals = (
+        #     self.tab_info["h_mpg_goals"] + self.tab_info["h_real_goals"]
+        # )
+        # self.h_mpg_goals = self.tab_info["h_mpg_goals"]
+        # self.h_real_goals = self.tab_info["h_real_goals"]
+        # self.h_own_goals = 0
+        # self.h_red_cards = 0
+        # self.v_total_goals = (
+        #     self.tab_info["v_mpg_goals"] + self.tab_info["v_real_goals"]
+        # )
+        # self.v_mpg_goals = self.tab_info["v_mpg_goals"]
+        # self.v_real_goals = self.tab_info["v_real_goals"]
+        # self.v_own_goals = 0
+        # self.v_red_cards = 0
+        # self.db_game_insert()
 
-        self.bonus = self.get_bonus_info()
-        self.db_bonus_insert()
+        # self.bonus = self.get_bonus_info()
+        # self.db_bonus_insert()
 
     def get_players_info_df(self, scores_tab_element):
         """
@@ -151,6 +153,10 @@ class Game(MPG):
         return df_players_info.filter(pl.col("team") == "home"), df_players_info.filter(
             pl.col("team") == "visitor"
         )
+
+    def scrape_matchweek(self):
+        # Match()
+        pass
 
     def get_score_tab_info(self):
         """

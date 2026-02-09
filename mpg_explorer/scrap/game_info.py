@@ -8,11 +8,11 @@ from selenium.webdriver.support import expected_conditions as EC
 
 import numpy as np
 from numpy.typing import NDArray
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from selenium.webdriver import Chrome
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
-
+from mpg_explorer.models.bonus import BonusName
 from mpg_explorer import logger
 
 
@@ -20,7 +20,7 @@ class PlayerResult(BaseModel):
     is_home_team: bool
     name: str
     score: int
-    list_bonus: list[str] = []
+    list_bonus: list[BonusName] = Field(default_factory=list)
 
 
 BONUS_PATH = "//div[button[.//img] and div/p]"
