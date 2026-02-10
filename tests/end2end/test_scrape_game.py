@@ -1,6 +1,7 @@
 import pytest
 from mpg_explorer.utils.driver import Driver
 from mpg_explorer.scrap.game_info import get_match_data, PlayerResult
+from mpg_explorer.models.bonus import BonusName
 from mpg_explorer import logger
 
 
@@ -31,13 +32,21 @@ def logged_in_driver():
                 is_home_team=True,
                 name="FC Rouen Métropole",
                 score=0,
-                list_bonus=["Capitaine", "4 défenseurs", "Cheat Code 18-26"],
+                list_bonus=[
+                    BonusName.capitaine,
+                    BonusName.four_defense,
+                    BonusName.cheat_code,
+                ],
             ),
             PlayerResult(
                 is_home_team=False,
                 name="NIKEU",
                 score=2,
-                list_bonus=["Capitaine", "4 défenseurs", "Zahia"],
+                list_bonus=[
+                    BonusName.capitaine,
+                    BonusName.four_defense,
+                    BonusName.zahia,
+                ],
             ),
         ),
         # Case 2: Baptoz vs KABZ (No bonus for away team)
@@ -47,7 +56,11 @@ def logged_in_driver():
                 is_home_team=True,
                 name="Baptoz",
                 score=4,
-                list_bonus=["Capitaine", "4 défenseurs", "Zahia"],
+                list_bonus=[
+                    BonusName.capitaine,
+                    BonusName.four_defense,
+                    BonusName.zahia,
+                ],
             ),
             PlayerResult(
                 is_home_team=False,
@@ -90,7 +103,6 @@ def test_mpg_match_data_extraction(
 
     # Execution
     home_player, outside_player = get_match_data(driver)
-
     # Assertions for Home Player
     assert home_player.name == expected_home.name
     assert home_player.score == expected_home.score
