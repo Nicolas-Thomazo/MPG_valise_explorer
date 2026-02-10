@@ -13,3 +13,10 @@ class BonusName(Enum):
     four_defense: str = "4 défenseurs"
     five_defense: str = "5 défenseurs"
     capitaine: str = "Capitaine"
+
+
+def get_bonus_name(potential_bonus: str) -> BonusName | None:
+    for bonus in BonusName:
+        if potential_bonus == bonus.value:
+            return BonusName[bonus.name]
+    return None

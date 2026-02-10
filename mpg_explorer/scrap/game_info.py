@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from selenium.webdriver import Chrome
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webelement import WebElement
-from mpg_explorer.models.bonus import BonusName
+from mpg_explorer.models.bonus import BonusName, get_bonus_name
 from mpg_explorer import logger
 
 
@@ -70,7 +70,7 @@ def parse_match_header(header_text: str) -> tuple[PlayerResult, PlayerResult]:
     return (home_player, outside_player)
 
 
-def extract_bonus_details(card: WebElement) -> str:
+def extract_bonus_details(card: WebElement) -> BonusName:
     """
     Extracts bonus name from a bonus card WebElement.
 
@@ -82,7 +82,13 @@ def extract_bonus_details(card: WebElement) -> str:
     """
     # The bonus is the first line of the card text
     text_bonus = card.text.split("\n")[0]
-    return text_bonus.strip()
+    bonus_strip = text_bonus.strip()
+    bonus: BonusName | None = get_bonus_name(bonus_strip)
+    if bonus is None:
+        raise Exception(
+            f"Found bonus name {bonus_strip}, which is not an instance of {BonusName}"
+        )
+    return bonus
 
 
 #############################
@@ -147,7 +153,7 @@ def _get_no_bonus_label_x(driver: Chrome) -> Optional[float]:
 
 def _extract_bonuses_with_positions(
     cards: list[WebElement],
-) -> tuple[list[str], list[float]]:
+) -> tuple[list[BonusName], list[float]]:
     """
     Iterates through cards to extract text details and their horizontal positions.
 
@@ -159,13 +165,13 @@ def _extract_bonuses_with_positions(
             - A list of bonus detail strings.
             - A list of corresponding x-coordinates.
     """
-    bonus_details: list[str] = []
+    bonus_details: list[BonusName] = []
     x_coords: list[float] = []
 
     for card in cards:
         try:
             x_pos = find_parent_x(card)
-            details = extract_bonus_details(card)
+            details: BonusName = extract_bonus_details(card)
 
             bonus_details.append(details)
             x_coords.append(x_pos)
@@ -200,7 +206,7 @@ def find_index_split_bonuses(position_array: NDArray) -> np.integer:
 def _assign_by_no_bonus_label(
     home: PlayerResult,
     away: PlayerResult,
-    bonuses: list[str],
+    bonuses: list[BonusName],
     x_coords: list[float],
     no_bonus_x: float,
 ) -> tuple[PlayerResult, PlayerResult]:
@@ -222,7 +228,10 @@ def _assign_by_no_bonus_label(
 
 
 def _assign_by_splitting(
-    home: PlayerResult, away: PlayerResult, bonuses: list[str], x_coords: list[float]
+    home: PlayerResult,
+    away: PlayerResult,
+    bonuses: list[BonusName],
+    x_coords: list[float],
 ) -> tuple[PlayerResult, PlayerResult]:
     """Splits the bonus list in two based on the largest gap in X coordinates."""
     if not x_coords:
@@ -286,5 +295,4 @@ def get_match_data(driver: Chrome) -> tuple[PlayerResult, PlayerResult]:
         home_player, away_player = _assign_by_splitting(
             home_player, away_player, bonus_list, x_coords
         )
-
     return home_player, away_player
