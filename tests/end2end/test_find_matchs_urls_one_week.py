@@ -13,7 +13,6 @@ def logged_in_driver():
     logger.info("Initializing driver and performing one-time login...")
     my_driver = Driver()
     try:
-        # Assurez-vous que login_mpg gère les cookies ou le formulaire de connexion
         my_driver.login_mpg()
         yield my_driver
     finally:
@@ -25,24 +24,22 @@ def logged_in_driver():
 @pytest.mark.parametrize(
     "league_url, division,list_expected_url",
     [
-        # Cas 1
         (
-            "https://mpg.football/league/mpg_league_NKU1UAPG/mpg_division_NKU1UAPG_11_1/results",
+            "https://mpg.football/league/mpg_league_NKU1UAPG/mpg_division_NKU1UAPG_10_1/results",
             1,
             [
-                "https://mpg.football/mpg-match/league/mpg_division_NKU1UAPG_11_1/mpg_division_match_NKU1UAPG_11_1_7_2_2_0",
-                "https://mpg.football/mpg-match/league/mpg_division_NKU1UAPG_11_1/mpg_division_match_NKU1UAPG_11_1_7_1_1_3",
-                "https://mpg.football/mpg-match/league/mpg_division_NKU1UAPG_11_1/mpg_division_match_NKU1UAPG_11_1_7_3_5_4",
+                "https://mpg.football/mpg-match/league/mpg_division_NKU1UAPG_10_1/mpg_division_match_NKU1UAPG_10_1_10_1_1_5",
+                "https://mpg.football/mpg-match/league/mpg_division_NKU1UAPG_10_1/mpg_division_match_NKU1UAPG_10_1_10_2_0_4",
+                "https://mpg.football/mpg-match/league/mpg_division_NKU1UAPG_10_1/mpg_division_match_NKU1UAPG_10_1_10_3_2_3",
             ],
         ),
-        # Cas 2
         (
-            "https://mpg.football/league/mpg_league_NKU1UAPG/mpg_division_NKU1UAPG_11_2/results",
+            "https://mpg.football/league/mpg_league_NKU1UAPG/mpg_division_NKU1UAPG_10_2/results",
             2,
             [
-                "https://mpg.football/mpg-match/league/mpg_division_NKU1UAPG_11_2/mpg_division_match_NKU1UAPG_11_2_7_1_3_0",
-                "https://mpg.football/mpg-match/league/mpg_division_NKU1UAPG_11_2/mpg_division_match_NKU1UAPG_11_2_7_2_5_2",
-                "https://mpg.football/mpg-match/league/mpg_division_NKU1UAPG_11_2/mpg_division_match_NKU1UAPG_11_2_7_3_1_4",
+                "https://mpg.football/mpg-match/league/mpg_division_NKU1UAPG_10_2/mpg_division_match_NKU1UAPG_10_2_10_1_5_4",
+                "https://mpg.football/mpg-match/league/mpg_division_NKU1UAPG_10_2/mpg_division_match_NKU1UAPG_10_2_10_2_0_2",
+                "https://mpg.football/mpg-match/league/mpg_division_NKU1UAPG_10_2/mpg_division_match_NKU1UAPG_10_2_10_3_1_3",
             ],
         ),
     ],
@@ -60,15 +57,9 @@ def test_find_matchs_urls_one_week(
     driver = logged_in_driver.driver
 
     logger.info(f"Navigating to league page: {league_url}")
-    driver.get(league_url)
-
-    # Instanciation du scrapper
-    league_scrapper = LeagueScrapper(driver=driver, division=division)
-
-    # Action : Récupérer les URLs
+    league_scrapper = LeagueScrapper(driver=driver, season_nb=10, division=division)
     found_urls = league_scrapper.find_matchs_urls_one_week()
     logger.info(f"URLs found: {found_urls}")
 
-    # Assertions
     assert isinstance(found_urls, list), "The output should be a list"
     assert found_urls == list_expected_url
