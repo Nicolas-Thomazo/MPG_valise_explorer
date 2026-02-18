@@ -1,6 +1,9 @@
 from logging import basicConfig, getLogger
-from pydantic import Field, computed_field
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class LeagueConfig(BaseSettings):
@@ -26,24 +29,16 @@ class LeagueConfig(BaseSettings):
     # --- CONFIG ---
     IS_DOCKER: bool = True
     MATCHWEEK: list[int] = [1]
+    DATA_PATH: Path = PROJECT_ROOT / "data"
 
     AZURE_STORAGE_CONNECTION_STRING: str | None = None
 
-    # @computed_field
-    # @property
-    # def RESULT_LINK(self) -> str:
-    #     """URL to the results page of the configured league."""
-    #     return (
-    #         f"https://mpg.football/league/mpg_league_{self.LEAGUE_ID}"
-    #         f"/mpg_division_{self.LEAGUE_ID}_"
-    #         f"{self.SEASON_NUMBER}_{self.DIVISION}/results"
-    #     )
-
-
-
-
 
 LEAGUE_CONFIG = LeagueConfig()
+
+# Root-level folder for local data exports (configurable via LeagueConfig).
+DATA_PATH = LEAGUE_CONFIG.DATA_PATH
+DATA_PATH.mkdir(parents=True, exist_ok=True)
 
 
 basicConfig(

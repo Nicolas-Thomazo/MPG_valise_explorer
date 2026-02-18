@@ -11,6 +11,7 @@
 # %%
 from uuid import uuid4
 
+import duckdb
 import polars as pl
 
 from mpg_explorer import LEAGUE_CONFIG, logger
@@ -18,6 +19,9 @@ from mpg_explorer.models.league_match_urls import LeagueMatchUrls
 from mpg_explorer.models.match_result import Match
 from mpg_explorer.scrap.game_info import get_match_data
 from mpg_explorer.scrap.league import LeagueScrapper
+from mpg_explorer.storage.league_matches_parquet import (
+    save_scraped_league_matches_to_parquet,
+)
 from mpg_explorer.utils.driver import Driver
 
 
@@ -40,7 +44,9 @@ def scrape_league_matches_dataframe(
     rows: list[dict] = []
     for matchweek_data in league_urls.matchweeks:
         matchweek = matchweek_data.matchweek
-        logger.info(f"[matchweek={matchweek}] Scraping {len(matchweek_data.urls)} matches.")
+        logger.info(
+            f"[matchweek={matchweek}] Scraping {len(matchweek_data.urls)} matches."
+        )
 
         for match_url in matchweek_data.urls:
             league.driver.get(match_url)
@@ -80,6 +86,18 @@ logger.info(f"Matchweeks scraped: {[m.matchweek for m in league_urls.matchweeks]
 # %%
 df_league = scrape_league_matches_dataframe(league=league, league_urls=league_urls)
 logger.info(f"Found {df_league.shape[0]} matches.")
-df_league
+parquet_path = save_scraped_league_matches_to_parquet(
+    df=df_league,
+    league_id=league.league_id,
+    season_number=league.season_nb,
+    division=league.division,
+)
+logger.info(f"Saved parquet to: {parquet_path}")
 
-#%%
+# %%
+df_duckdb = duckdb.sql(
+    f"SELECT * FROM read_parquet('{parquet_path}') ORDER BY matchweek, home_team_name"
+).pl()
+df_duckdb
+
+# %%
