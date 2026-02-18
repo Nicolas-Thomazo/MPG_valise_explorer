@@ -175,8 +175,7 @@ def _extract_bonuses_with_positions(
 
             bonus_details.append(details)
             x_coords.append(x_pos)
-            print(f"Found bonus: {details} at x={x_pos}")
-            logger.info(f"Found bonus: {details} at x={x_pos}")
+            logger.debug(f"Found bonus: {details.name} at x={x_pos}")
         except Exception as e:
             logger.warning(f"Failed to process a bonus card: {e}")
 

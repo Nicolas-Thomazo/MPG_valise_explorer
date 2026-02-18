@@ -16,13 +16,13 @@ class Match(BaseModel):
     season_number: int
     matchweek: int
     # Home
-    home_team_id: str
+    home_team_name: str
     home_total_goals: int
     home_mpg_goals: int | None = None
     home_real_goals: int | None = None
     home_bonus: list[BonusName]
     # Visitor
-    visitor_team_id: str
+    visitor_team_name: str
     visitor_total_goals: int
     visitor_mpg_goals: int | None = None
     visitor_real_goals: int | None = None

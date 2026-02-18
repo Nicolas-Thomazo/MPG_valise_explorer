@@ -1,6 +1,7 @@
 import pytest
 
 from mpg_explorer import logger
+from mpg_explorer.models.league_match_urls import LeagueMatchUrls
 from mpg_explorer.scrap.league import LeagueScrapper
 from mpg_explorer.utils.driver import Driver
 
@@ -60,10 +61,11 @@ def test_find_matchs_urls_all_matchweeks(logged_in_driver):
         division=DIVISION,
     )
 
-    urls_by_matchweek = league_scrapper.find_matchs_urls_all_matchweeks()
-    logger.info(f"URLs found by matchweek: {urls_by_matchweek}")
+    result = league_scrapper.find_matchs_urls_all_matchweeks()
+    logger.info(f"URLs found by matchweek: {result}")
 
-    assert isinstance(urls_by_matchweek, dict), "The output should be a dict"
+    assert isinstance(result, LeagueMatchUrls), "The output should be a LeagueMatchUrls"
+    urls_by_matchweek = result.to_dict()
     assert sorted(urls_by_matchweek.keys()) == sorted(
         EXPECTED_MATCHWEEKS
     ), "The scraped matchweeks do not match expected matchweeks"

@@ -11,6 +11,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 from mpg_explorer import LEAGUE_CONFIG, logger
+from mpg_explorer.models.league_match_urls import LeagueMatchUrls, MatchweekUrls
 
 
 class LeagueScrapper:
@@ -113,13 +114,13 @@ class LeagueScrapper:
         )
         return list_matchs_urls
 
-    def find_matchs_urls_all_matchweeks(self) -> dict[int, list[str]]:
+    def find_matchs_urls_all_matchweeks(self) -> LeagueMatchUrls:
         """
         Iterates on every matchweek available in the dropdown and returns
         all match URLs grouped by matchweek.
 
         Returns:
-            dict[int, list[str]]: {matchweek_number: [match_url, ...], ...}
+            LeagueMatchUrls: Structured URLs grouped by matchweek.
         """
         results: dict[int, list[str]] = {}
         total_matchweeks = self._get_matchweeks_count()
@@ -167,7 +168,16 @@ class LeagueScrapper:
         logger.info(
             f"[league_id={self.league_id}] Finished scraping all matchweeks: {sorted(results.keys())}"
         )
-        return results
+        ordered_matchweeks = [
+            MatchweekUrls(matchweek=week, urls=results[week])
+            for week in sorted(results.keys())
+        ]
+        return LeagueMatchUrls(
+            league_id=self.league_id,
+            division=self.division,
+            season_number=self.season_nb,
+            matchweeks=ordered_matchweeks,
+        )
 
     ##########################
     #### Utils scrapping ####
