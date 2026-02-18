@@ -54,37 +54,6 @@ class LeagueScrapper:
             f"{self.season_nb}_{self.division}/results"
         )
 
-    def find_match_urls(self):
-        """
-        Scrap games from a specific league. By default all matches of the season
-        otherwise only the matches in 'matchweeks' list
-
-        1- Set 'matchweek_start' to the current matchweek (to know when you've made a loop)
-        2- While as matchweek + 1 is not equal to matchweek_start, we continue scrapping.
-            If it is, this means we'll start again from the first matchweek we traversed.
-            3- If the current matchweek is in the list,
-                or if matchweek is empty (meaning we want to scrap all games), we scrap it.
-
-        Args:
-            matchweeks (list, optional): list of int of matchweeks to scrap, defaults to []
-        """
-        logger.info(f"[{self.league_id=}] Starting league scraping for league")
-        matchweeks_scrapped = []
-        for matchweek in self.matchweeks:
-            logger.info(f"[{self.league_id=}][{matchweek}] scrapping one week")
-            list_matchs_urls: list[str] = self.find_matchs_urls_one_week(
-                matchweek=matchweek
-            )
-            matchweeks_scrapped.append(matchweek)
-        logger.info(
-            f"[{self.league_id=}] matchweek scrapped : {matchweeks_scrapped} {list_matchs_urls}"
-        )
-        if len(list_matchs_urls) != len(matchweeks_scrapped):
-            raise ValueError(
-                f"The length of the urls scrapped should be the same as matchweeks asked. Got {len(list_matchs_urls)} urls for {len(matchweeks_scrapped)} matchs asked."
-            )
-        return list_matchs_urls
-
     def find_matchs_urls_one_week(self, matchweek: int | None = None) -> list[str]:
         """
         Iterate on every match of a given matchweek and retrieve their URLs.
@@ -205,15 +174,38 @@ class LeagueScrapper:
     ##########################
     def _open_matchweek_dropdown(self):
         """Opens the matchweek dropdown selector."""
-        dropdown_button_xpath = "//button[@aria-haspopup='listbox' and @type='button']"
-        WebDriverWait(self.driver, 10).until(
-            EC.presence_of_element_located((By.XPATH, dropdown_button_xpath))
-        )
-        elements = self.driver.find_elements(By.XPATH, dropdown_button_xpath)
-        button = next((element for element in elements if element.is_displayed()), None)
+        dropdown_button_xpath_candidates = [
+            "//button[@aria-haspopup='listbox' and @type='button']",
+            "//button[@aria-haspopup='listbox']",
+        ]
+
+        button = None
+        for attempt in range(2):
+            if "results" not in self.driver.current_url:
+                self.driver.get(self.results_link)
+
+            for xpath in dropdown_button_xpath_candidates:
+                try:
+                    WebDriverWait(self.driver, 8).until(
+                        EC.presence_of_element_located((By.XPATH, xpath))
+                    )
+                    elements = self.driver.find_elements(By.XPATH, xpath)
+                    button = next(
+                        (element for element in elements if element.is_displayed()), None
+                    )
+                    if button is not None:
+                        break
+                except TimeoutException:
+                    continue
+
+            if button is not None:
+                break
+            self.driver.get(self.results_link)
 
         if button is None:
-            raise TimeoutException("Could not find matchweek dropdown button.")
+            raise TimeoutException(
+                f"Could not find matchweek dropdown button on {self.driver.current_url}."
+            )
 
         self.driver.execute_script(
             "arguments[0].scrollIntoView({block: 'center'});", button
@@ -323,12 +315,15 @@ class LeagueScrapper:
 
         target_score = scores[index]
 
-        # B. Ensure clickable and Click
+        current_list_url = self.driver.current_url
+
+        # B. Ensure clickable and click
         self._click_score_element(target_score)
 
-        # C. Capture URL
-        # Optional: Wait briefly for URL update if strictly necessary
-        # WebDriverWait(self.driver, 5).until(lambda d: "mpg-match" in d.current_url)
+        # C. Capture URL after navigation to match page
+        WebDriverWait(self.driver, 8).until(
+            lambda d: "mpg-match" in d.current_url and d.current_url != current_list_url
+        )
         match_url = self.driver.current_url
 
         # D. Go Back to the list
@@ -347,8 +342,8 @@ class LeagueScrapper:
         # Remplacez ceci par votre appel existant: return wait_for_scores(self.driver)
         # Voici une implémentation standard basée sur votre xpath:
         xpath = get_button_score_balise()  # Supposé importé
-        return WebDriverWait(self.driver, 10).until(
-            EC.presence_of_all_elements_located((By.XPATH, xpath))
+        return WebDriverWait(self.driver, 12).until(
+            EC.visibility_of_all_elements_located((By.XPATH, xpath))
         )
 
     def _click_score_element(self, element):
@@ -356,8 +351,11 @@ class LeagueScrapper:
         self.driver.execute_script(
             "arguments[0].scrollIntoView({block: 'center'});", element
         )
-        WebDriverWait(self.driver, 10).until(EC.element_to_be_clickable(element))
-        element.click()
+        try:
+            WebDriverWait(self.driver, 6).until(EC.element_to_be_clickable(element))
+            element.click()
+        except Exception:
+            self.driver.execute_script("arguments[0].click();", element)
 
     def _wait_for_list_to_reload(self):
         """Waits for the main list container to be present again after navigation."""
