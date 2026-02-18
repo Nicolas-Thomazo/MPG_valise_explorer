@@ -1,16 +1,16 @@
 """Module to scrap league data from MPG website."""
 
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.common.by import By
+import re
 
-from mpg_explorer.scrap.game import Game
-from selenium.webdriver.support import expected_conditions as EC
-
-from mpg_explorer import logger, LEAGUE_CONFIG
-from selenium.common.exceptions import StaleElementReferenceException, TimeoutException
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver import Chrome
-from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+
+from mpg_explorer import LEAGUE_CONFIG, logger
 
 
 class LeagueScrapper:
@@ -41,6 +41,7 @@ class LeagueScrapper:
         self.season_nb = season_nb
         self.division = division
         self.nb_players = nb_players
+        self.matchweeks = matchweeks
         self.results_link = self.get_result_link()
 
         self.driver.get(self.results_link)
@@ -53,7 +54,7 @@ class LeagueScrapper:
             f"{self.season_nb}_{self.division}/results"
         )
 
-    def scrap_league_games_urls(self):
+    def find_match_urls(self):
         """
         Scrap games from a specific league. By default all matches of the season
         otherwise only the matches in 'matchweeks' list
@@ -69,7 +70,7 @@ class LeagueScrapper:
         """
         logger.info(f"[{self.league_id=}] Starting league scraping for league")
         matchweeks_scrapped = []
-        for matchweek in matchweeks:
+        for matchweek in self.matchweeks:
             logger.info(f"[{self.league_id=}][{matchweek}] scrapping one week")
             list_matchs_urls: list[str] = self.find_matchs_urls_one_week(
                 matchweek=matchweek
@@ -84,7 +85,7 @@ class LeagueScrapper:
             )
         return list_matchs_urls
 
-    def find_matchs_urls_one_week(self) -> list[str]:
+    def find_matchs_urls_one_week(self, matchweek: int | None = None) -> list[str]:
         """
         Iterate on every match of a given matchweek and retrieve their URLs.
 
@@ -113,24 +114,186 @@ class LeagueScrapper:
 
         # 2. Iterate by index
         for index in range(total_matches):
-            try:
-                logger.info(f"Processing match {index + 1}/{total_matches}...")
-                match_url = self._extract_url_from_match_index(index)
+            done = False
+            for _ in range(3):
+                try:
+                    if matchweek is not None:
+                        self._select_matchweek(matchweek)
 
-                if match_url:
-                    list_matchs_urls.append(match_url)
+                    logger.info(f"Processing match {index + 1}/{total_matches}...")
+                    match_url = self._extract_url_from_match_index(index)
 
-            except Exception as exc:
-                logger.error(f"Failed to scrape match at index {index}: {exc}")
-                # Try to recover navigation if we are stuck on a sub-page
-                if "mpg-match" in self.driver.current_url:
-                    self.driver.back()
-                continue
+                    if match_url and match_url not in list_matchs_urls:
+                        list_matchs_urls.append(match_url)
+                    done = True
+                    break
+                except Exception as exc:
+                    logger.error(f"Failed to scrape match at index {index}: {exc}")
+                    # Try to recover navigation if we are stuck on a sub-page
+                    if "mpg-match" in self.driver.current_url:
+                        self.driver.back()
+                    self._wait_for_list_to_reload()
+                    continue
+            if not done:
+                logger.warning(
+                    f"[league_id={self.league_id}] Could not scrape match at index {index} after retries."
+                )
 
         logger.info(
             f"[league_id={self.league_id}] Successfully scrapped {len(list_matchs_urls)} match URLs."
         )
         return list_matchs_urls
+
+    def find_matchs_urls_all_matchweeks(self) -> dict[int, list[str]]:
+        """
+        Iterates on every matchweek available in the dropdown and returns
+        all match URLs grouped by matchweek.
+
+        Returns:
+            dict[int, list[str]]: {matchweek_number: [match_url, ...], ...}
+        """
+        results: dict[int, list[str]] = {}
+        total_matchweeks = self._get_matchweeks_count()
+        logger.info(
+            f"[league_id={self.league_id}] Found {total_matchweeks} matchweeks in selector."
+        )
+
+        for index in range(total_matchweeks):
+            self._open_matchweek_dropdown()
+            options = self._wait_for_matchweek_options()
+            if index >= len(options):
+                logger.warning(
+                    f"[league_id={self.league_id}] Matchweek option index {index} out of range."
+                )
+                break
+
+            option = options[index]
+            option_label = option.text
+            matchweek = self._extract_matchweek_from_label(option_label)
+            if matchweek is None:
+                logger.warning(
+                    f"[league_id={self.league_id}] Could not parse matchweek number from option '{option_label}'. Skipping."
+                )
+                continue
+
+            self.driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center'});", option
+            )
+            try:
+                option.click()
+            except Exception:
+                self.driver.execute_script("arguments[0].click();", option)
+            try:
+                self._wait_for_matchweek_applied(matchweek, timeout=5)
+            except TimeoutException:
+                logger.warning(
+                    f"[league_id={self.league_id}] Could not confirm selected matchweek {matchweek} from button label; continuing."
+                )
+
+            logger.info(
+                f"[league_id={self.league_id}][matchweek={matchweek}] Scrapping match URLs."
+            )
+            results[matchweek] = self.find_matchs_urls_one_week(matchweek=matchweek)
+
+        logger.info(
+            f"[league_id={self.league_id}] Finished scraping all matchweeks: {sorted(results.keys())}"
+        )
+        return results
+
+    ##########################
+    #### Utils scrapping ####
+    ##########################
+    def _open_matchweek_dropdown(self):
+        """Opens the matchweek dropdown selector."""
+        dropdown_button_xpath = "//button[@aria-haspopup='listbox' and @type='button']"
+        WebDriverWait(self.driver, 10).until(
+            EC.presence_of_element_located((By.XPATH, dropdown_button_xpath))
+        )
+        elements = self.driver.find_elements(By.XPATH, dropdown_button_xpath)
+        button = next((element for element in elements if element.is_displayed()), None)
+
+        if button is None:
+            raise TimeoutException("Could not find matchweek dropdown button.")
+
+        self.driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center'});", button
+        )
+        try:
+            WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable(button))
+            button.click()
+        except Exception:
+            self.driver.execute_script("arguments[0].click();", button)
+        self._wait_for_matchweek_options()
+
+    def _wait_for_matchweek_options(self) -> list:
+        """Waits for matchweek dropdown options to be present."""
+        options_xpath = "//ul[@role='listbox']//li[@role='option']"
+        return WebDriverWait(self.driver, 10).until(
+            EC.presence_of_all_elements_located((By.XPATH, options_xpath))
+        )
+
+    def _get_matchweeks_count(self) -> int:
+        """Returns the number of available matchweeks in the dropdown."""
+        self._open_matchweek_dropdown()
+        options = self._wait_for_matchweek_options()
+        count = len(options)
+        # Close the dropdown to avoid overlapping with next interactions.
+        ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
+        return count
+
+    def _extract_matchweek_from_label(self, label: str) -> int | None:
+        """
+        Extracts numeric matchweek from labels like 'Journée 8'.
+        """
+        match = re.search(r"Journ[ée]e?\s+(\d+)", label, flags=re.IGNORECASE)
+        if not match:
+            return None
+        return int(match.group(1))
+
+    def _select_matchweek(self, matchweek: int):
+        """Selects a specific matchweek from the dropdown."""
+        self._open_matchweek_dropdown()
+        option_xpath = f"//ul[@role='listbox']//li[@role='option' and .//*[contains(normalize-space(.), 'Journée {matchweek}')]]"
+        option = WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable((By.XPATH, option_xpath))
+        )
+        self.driver.execute_script(
+            "arguments[0].scrollIntoView({block: 'center'});", option
+        )
+        try:
+            option.click()
+        except Exception:
+            self.driver.execute_script("arguments[0].click();", option)
+        self._wait_for_matchweek_applied(matchweek)
+
+    def _wait_for_matchweek_applied(self, matchweek: int, timeout: int = 15):
+        """
+        Waits until the selected matchweek label appears on the dropdown button.
+        This is more robust than waiting for score cards because some matchweeks
+        can legitimately have no displayed matches yet.
+        """
+        dropdown_button_xpath = "//button[@aria-haspopup='listbox' and @type='button']"
+        WebDriverWait(self.driver, timeout).until(
+            EC.presence_of_element_located((By.XPATH, dropdown_button_xpath))
+        )
+
+        def _matchweek_visible_on_button(driver):
+            buttons = driver.find_elements(By.XPATH, dropdown_button_xpath)
+            button = next(
+                (element for element in buttons if element.is_displayed()), None
+            )
+            if button is None:
+                return False
+            text = button.text or ""
+            parsed = self._extract_matchweek_from_label(text)
+            # Fallback for layouts like "Journée : 9 / 10"
+            if parsed is None:
+                numbers = re.findall(r"\d+", text)
+                if numbers:
+                    parsed = int(numbers[0])
+            return parsed == matchweek
+
+        WebDriverWait(self.driver, timeout).until(_matchweek_visible_on_button)
 
     def _get_matches_count(self) -> int:
         """
