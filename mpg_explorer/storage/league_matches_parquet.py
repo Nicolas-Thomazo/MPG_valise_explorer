@@ -60,3 +60,44 @@ def get_scraped_league_matches_parquet_path(
             f"No parquet file found at {parquet_path}. Run scrap_league first."
         )
     return parquet_path
+
+
+def get_matchweeks_with_unplayed_matches(
+    league_id: str,
+    season_number: int,
+    division: int,
+    data_path: Path | None = None,
+) -> list[int] | None:
+    """
+    Return matchweeks that still have incomplete match data.
+
+    Returns:
+        list[int]: Sorted unique matchweeks where `match_played` is False
+            or `error_in_scrapping` is True.
+        None: No parquet found or legacy parquet without required columns.
+    """
+    try:
+        parquet_path = get_scraped_league_matches_parquet_path(
+            league_id=league_id,
+            season_number=season_number,
+            division=division,
+            data_path=data_path,
+        )
+    except FileNotFoundError:
+        return None
+
+    df = pl.read_parquet(str(parquet_path))
+    required_columns = {"matchweek", "match_played", "error_in_scrapping"}
+    if not required_columns.issubset(set(df.columns)):
+        return None
+
+    return (
+        df.filter(
+            (pl.col("match_played") == False) | (pl.col("error_in_scrapping") == True)
+        )
+        .select("matchweek")
+        .unique()
+        .sort("matchweek")
+        .get_column("matchweek")
+        .to_list()
+    )

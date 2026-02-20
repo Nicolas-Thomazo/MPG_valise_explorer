@@ -16,6 +16,7 @@ class Match(BaseModel):
     season_number: int
     matchweek: int
     match_played: bool = True
+    error_in_scrapping: bool = False
     # Home
     home_team_name: str | None = None
     home_total_goals: int | None = None

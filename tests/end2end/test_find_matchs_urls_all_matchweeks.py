@@ -61,7 +61,9 @@ def test_find_matchs_urls_all_matchweeks(logged_in_driver):
         division=DIVISION,
     )
 
-    result = league_scrapper.find_matchs_urls_all_matchweeks()
+    result = league_scrapper.find_matchs_urls_all_matchweeks(
+        use_storage_verification=False
+    )
     logger.info(f"URLs found by matchweek: {result}")
 
     assert isinstance(result, LeagueMatchUrls), "The output should be a LeagueMatchUrls"

@@ -1,7 +1,10 @@
 """Module to scrap league data from MPG website."""
 
 import re
+from pathlib import Path
+from uuid import uuid4
 
+import polars as pl
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver import Chrome
 from selenium.webdriver.common.action_chains import ActionChains
@@ -12,6 +15,13 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from mpg_explorer import LEAGUE_CONFIG, logger
 from mpg_explorer.models.league_match_urls import LeagueMatchUrls, MatchweekUrls
+from mpg_explorer.models.match_result import Match
+from mpg_explorer.scrap.game_info import get_match_data
+from mpg_explorer.storage.league_matches_parquet import (
+    get_matchweeks_with_unplayed_matches,
+    get_scraped_league_matches_parquet_path,
+    save_scraped_league_matches_to_parquet,
+)
 
 
 class LeagueScrapper:
@@ -124,15 +134,53 @@ class LeagueScrapper:
             matches_played=list_matches_played,
         )
 
-    def find_matchs_urls_all_matchweeks(self) -> LeagueMatchUrls:
+    def find_matchs_urls_all_matchweeks(
+        self,
+        matchweeks: list[int] | None = None,
+        use_storage_verification: bool = True,
+        data_path: Path | None = None,
+    ) -> LeagueMatchUrls:
         """
-        Iterates on every matchweek available in the dropdown and returns
-        all match URLs grouped by matchweek.
+        Iterates on available matchweeks and returns all match URLs grouped by matchweek.
+
+        If `matchweeks` is not provided and `use_storage_verification` is True,
+        it checks the parquet export and only keeps matchweeks containing
+        at least one pending match (`match_played = False` or
+        `error_in_scrapping = True`).
 
         Returns:
             LeagueMatchUrls: Structured URLs grouped by matchweek.
         """
         results: dict[int, MatchweekUrls] = {}
+        target_matchweeks = matchweeks
+        if target_matchweeks is None and use_storage_verification:
+            target_matchweeks = get_matchweeks_with_unplayed_matches(
+                league_id=self.league_id,
+                season_number=self.season_nb,
+                division=self.division,
+                data_path=data_path or LEAGUE_CONFIG.DATA_PATH,
+            )
+            if target_matchweeks is None:
+                logger.info(
+                    f"[league_id={self.league_id}] No compatible parquet verification found. Scraping all matchweeks."
+                )
+            else:
+                logger.info(
+                    f"[league_id={self.league_id}] Parquet verification selected matchweeks: {target_matchweeks}"
+                )
+
+        if target_matchweeks == []:
+            logger.info(
+                f"[league_id={self.league_id}] No matchweek to scrape after parquet verification."
+            )
+            return LeagueMatchUrls(
+                league_id=self.league_id,
+                division=self.division,
+                season_number=self.season_nb,
+                matchweeks=[],
+            )
+
+        target_matchweeks_set = set(target_matchweeks) if target_matchweeks else None
         total_matchweeks = self._get_matchweeks_count()
         logger.info(
             f"[league_id={self.league_id}] Found {total_matchweeks} matchweeks in selector."
@@ -154,6 +202,11 @@ class LeagueScrapper:
                 logger.warning(
                     f"[league_id={self.league_id}] Could not parse matchweek number from option '{option_label}'. Skipping."
                 )
+                continue
+            if (
+                target_matchweeks_set is not None
+                and matchweek not in target_matchweeks_set
+            ):
                 continue
 
             self.driver.execute_script(
@@ -193,9 +246,225 @@ class LeagueScrapper:
             matchweeks=ordered_matchweeks,
         )
 
+    def scrape_matches_dataframe(
+        self, league_urls: LeagueMatchUrls | None = None
+    ) -> pl.DataFrame:
+        """
+        Scrape match rows for the provided URLs and return them as a dataframe.
+
+        Args:
+            league_urls: Optional pre-fetched match URLs grouped by matchweek.
+
+        Returns:
+            pl.DataFrame: One row per match, including `match_played`.
+        """
+        if league_urls is None:
+            league_urls = self.find_matchs_urls_all_matchweeks(
+                use_storage_verification=False
+            )
+
+        rows: list[dict] = []
+        for matchweek_data in league_urls.matchweeks:
+            matchweek = matchweek_data.matchweek
+            logger.info(
+                f"[matchweek={matchweek}] Scraping {len(matchweek_data.urls)} matches."
+            )
+
+            for match_url, match_played in zip(
+                matchweek_data.urls, matchweek_data.matches_played, strict=True
+            ):
+                row = Match(
+                    match_id=str(uuid4()),
+                    league_id=self.league_id,
+                    division=self.division,
+                    season_number=self.season_nb,
+                    matchweek=matchweek,
+                    match_played=match_played,
+                    error_in_scrapping=False,
+                ).model_dump(mode="json")
+
+                if match_played:
+                    try:
+                        self.driver.get(match_url)
+                        home_player, away_player = get_match_data(driver=self.driver)
+                        row.update(
+                            {
+                                "home_team_name": home_player.name,
+                                "home_total_goals": home_player.score,
+                                "home_bonus": [bonus.value for bonus in home_player.list_bonus],
+                                "visitor_team_name": away_player.name,
+                                "visitor_total_goals": away_player.score,
+                                "visitor_bonus": [
+                                    bonus.value for bonus in away_player.list_bonus
+                                ],
+                            }
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            f"[league_id={self.league_id}][matchweek={matchweek}] Failed to scrape match '{match_url}': {exc}"
+                        )
+                        row["error_in_scrapping"] = True
+                        row["match_played"] = False
+                rows.append(row)
+
+        if not rows:
+            return self._empty_matches_dataframe()
+        return pl.DataFrame(rows)
+
+    def scrape_league_with_verification(
+        self, data_path: Path | None = None
+    ) -> pl.DataFrame:
+        """
+        Scrape league data incrementally by reusing existing parquet exports.
+
+        Behavior:
+            - If no parquet exists, scrape all matchweeks.
+            - If parquet lacks `match_played`, scrape all matchweeks.
+            - If no unplayed matches exist, reuse current parquet rows.
+            - Otherwise, scrape only matchweeks that still contain unplayed matches.
+
+        Args:
+            data_path: Optional storage directory overriding configured data path.
+
+        Returns:
+            pl.DataFrame: Refreshed dataframe ready to be saved.
+        """
+        target_data_path = data_path or LEAGUE_CONFIG.DATA_PATH
+        try:
+            parquet_path = get_scraped_league_matches_parquet_path(
+                league_id=self.league_id,
+                season_number=self.season_nb,
+                division=self.division,
+                data_path=target_data_path,
+            )
+        except FileNotFoundError:
+            logger.info(
+                f"[league_id={self.league_id}] No parquet found. Scraping all matchweeks."
+            )
+            league_urls = self.find_matchs_urls_all_matchweeks(
+                use_storage_verification=False, data_path=target_data_path
+            )
+            return self.scrape_matches_dataframe(league_urls=league_urls)
+
+        df_existing = pl.read_parquet(str(parquet_path))
+        matchweeks_to_refresh = get_matchweeks_with_unplayed_matches(
+            league_id=self.league_id,
+            season_number=self.season_nb,
+            division=self.division,
+            data_path=target_data_path,
+        )
+
+        if matchweeks_to_refresh is None:
+            logger.info(
+                f"[league_id={self.league_id}] Legacy parquet schema. Scraping all matchweeks."
+            )
+            league_urls = self.find_matchs_urls_all_matchweeks(
+                use_storage_verification=False, data_path=target_data_path
+            )
+            return self.scrape_matches_dataframe(league_urls=league_urls)
+
+        if not matchweeks_to_refresh:
+            logger.info(
+                f"[league_id={self.league_id}] No unplayed matches found in parquet. Reusing current data."
+            )
+            return df_existing
+
+        logger.info(
+            f"[league_id={self.league_id}] Refreshing matchweeks: {matchweeks_to_refresh}"
+        )
+        league_urls = self.find_matchs_urls_all_matchweeks(
+            matchweeks=matchweeks_to_refresh,
+            use_storage_verification=False,
+            data_path=target_data_path,
+        )
+        matchweeks_with_urls = [
+            matchweek_data for matchweek_data in league_urls.matchweeks if matchweek_data.urls
+        ]
+        if not matchweeks_with_urls:
+            logger.info(
+                f"[league_id={self.league_id}] No match URLs found for pending matchweeks. Keeping current parquet rows."
+            )
+            return df_existing
+
+        if len(matchweeks_with_urls) != len(league_urls.matchweeks):
+            missing_matchweeks = sorted(
+                {
+                    matchweek_data.matchweek
+                    for matchweek_data in league_urls.matchweeks
+                    if not matchweek_data.urls
+                }
+            )
+            logger.warning(
+                f"[league_id={self.league_id}] Skipping matchweeks with no URLs: {missing_matchweeks}"
+            )
+
+        filtered_league_urls = LeagueMatchUrls(
+            league_id=league_urls.league_id,
+            division=league_urls.division,
+            season_number=league_urls.season_number,
+            matchweeks=matchweeks_with_urls,
+        )
+        refreshed_matchweeks = [item.matchweek for item in matchweeks_with_urls]
+        df_refresh = self.scrape_matches_dataframe(league_urls=filtered_league_urls)
+
+        return pl.concat(
+            [
+                df_existing.filter(~pl.col("matchweek").is_in(refreshed_matchweeks)),
+                df_refresh,
+            ],
+            how="vertical_relaxed",
+        )
+
+    def scrape_and_save_league(
+        self, data_path: Path | None = None
+    ) -> tuple[pl.DataFrame, Path]:
+        """
+        Scrape league data with parquet verification and persist the result.
+
+        Args:
+            data_path: Optional storage directory overriding configured data path.
+
+        Returns:
+            tuple[pl.DataFrame, Path]: Scraped dataframe and written parquet path.
+        """
+        target_data_path = data_path or LEAGUE_CONFIG.DATA_PATH
+        df = self.scrape_league_with_verification(data_path=target_data_path)
+        parquet_path = save_scraped_league_matches_to_parquet(
+            df=df,
+            league_id=self.league_id,
+            season_number=self.season_nb,
+            division=self.division,
+            data_path=target_data_path,
+        )
+        return df, parquet_path
+
     ##########################
     #### Utils scrapping ####
     ##########################
+    def _empty_matches_dataframe(self) -> pl.DataFrame:
+        """Build an empty match dataframe with a stable schema."""
+        return pl.DataFrame(
+            schema={
+                "match_id": pl.String,
+                "league_id": pl.String,
+                "division": pl.Int64,
+                "season_number": pl.Int64,
+                "matchweek": pl.Int64,
+                "match_played": pl.Boolean,
+                "error_in_scrapping": pl.Boolean,
+                "home_team_name": pl.String,
+                "home_total_goals": pl.Int64,
+                "home_mpg_goals": pl.Int64,
+                "home_real_goals": pl.Int64,
+                "home_bonus": pl.List(pl.String),
+                "visitor_team_name": pl.String,
+                "visitor_total_goals": pl.Int64,
+                "visitor_mpg_goals": pl.Int64,
+                "visitor_real_goals": pl.Int64,
+                "visitor_bonus": pl.List(pl.String),
+            }
+        )
+
     def _open_matchweek_dropdown(self):
         """Opens the matchweek dropdown selector."""
         dropdown_button_xpath_candidates = [
