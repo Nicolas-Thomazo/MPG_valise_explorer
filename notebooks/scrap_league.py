@@ -48,23 +48,31 @@ def scrape_league_matches_dataframe(
             f"[matchweek={matchweek}] Scraping {len(matchweek_data.urls)} matches."
         )
 
-        for match_url in matchweek_data.urls:
-            league.driver.get(match_url)
-            home_player, away_player = get_match_data(driver=league.driver)
-
+        for match_url, match_played in zip(
+            matchweek_data.urls, matchweek_data.matches_played, strict=True
+        ):
             row = Match(
                 match_id=str(uuid4()),
                 league_id=league.league_id,
                 division=league.division,
                 season_number=league.season_nb,
                 matchweek=matchweek,
-                home_team_name=home_player.name,
-                home_total_goals=home_player.score,
-                home_bonus=home_player.list_bonus,
-                visitor_team_name=away_player.name,
-                visitor_total_goals=away_player.score,
-                visitor_bonus=away_player.list_bonus,
+                match_played=match_played,
             ).model_dump(mode="json")
+
+            if match_played:
+                league.driver.get(match_url)
+                home_player, away_player = get_match_data(driver=league.driver)
+                row.update(
+                    {
+                        "home_team_name": home_player.name,
+                        "home_total_goals": home_player.score,
+                        "home_bonus": home_player.list_bonus,
+                        "visitor_team_name": away_player.name,
+                        "visitor_total_goals": away_player.score,
+                        "visitor_bonus": away_player.list_bonus,
+                    }
+                )
             rows.append(row)
 
     return pl.DataFrame(rows)

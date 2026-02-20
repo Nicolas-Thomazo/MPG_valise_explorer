@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 class MatchweekUrls(BaseModel):
     matchweek: int
     urls: list[str] = Field(default_factory=list)
+    matches_played: list[bool] = Field(default_factory=list)
 
 
 class LeagueMatchUrls(BaseModel):
@@ -14,4 +15,3 @@ class LeagueMatchUrls(BaseModel):
 
     def to_dict(self) -> dict[int, list[str]]:
         return {item.matchweek: item.urls for item in self.matchweeks}
-

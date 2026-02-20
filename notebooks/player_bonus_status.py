@@ -44,7 +44,7 @@ def _row_to_match(row: dict[str, Any]) -> Match:
     return Match(**row)
 
 
-def load_matches_from_parquet(parquet_path: Path) -> list[Match]:
+def load_matches_from_parquet(parquet_path: Path) -> pl.DataFrame:
     df = pl.read_parquet(str(parquet_path))
     return df
 
@@ -61,7 +61,7 @@ parquet_path = get_scraped_league_matches_parquet_path(
 # Option B: force a specific parquet
 # parquet_path = Path("data/league_NKU1UAPG_season_11_division_2.parquet")
 
-player_name = "Tooms"
+player_name = "KABZ"
 
 # %%
 df = load_matches_from_parquet(parquet_path)

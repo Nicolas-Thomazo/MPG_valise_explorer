@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from mpg_explorer.models.bonus import BonusName
 
 
@@ -15,15 +15,16 @@ class Match(BaseModel):
     division: int
     season_number: int
     matchweek: int
+    match_played: bool = True
     # Home
-    home_team_name: str
-    home_total_goals: int
+    home_team_name: str | None = None
+    home_total_goals: int | None = None
     home_mpg_goals: int | None = None
     home_real_goals: int | None = None
-    home_bonus: list[BonusName]
+    home_bonus: list[BonusName] = Field(default_factory=list)
     # Visitor
-    visitor_team_name: str
-    visitor_total_goals: int
+    visitor_team_name: str | None = None
+    visitor_total_goals: int | None = None
     visitor_mpg_goals: int | None = None
     visitor_real_goals: int | None = None
-    visitor_bonus: list[BonusName]
+    visitor_bonus: list[BonusName] = Field(default_factory=list)

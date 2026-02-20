@@ -55,7 +55,7 @@ class LeagueScrapper:
             f"{self.season_nb}_{self.division}/results"
         )
 
-    def find_matchs_urls_one_week(self, matchweek: int | None = None) -> list[str]:
+    def find_matchs_urls_one_week(self, matchweek: int | None = None) -> MatchweekUrls:
         """
         Iterate on every match of a given matchweek and retrieve their URLs.
 
@@ -68,9 +68,10 @@ class LeagueScrapper:
                             reserved for navigation logic).
 
         Returns:
-            list[str]: A list of absolute URLs for each match found.
+            MatchweekUrls: Matchweek payload with URLs and played status list.
         """
         list_matchs_urls: list[str] = []
+        list_matches_played: list[bool] = []
 
         # 1. Get total count of matches
         try:
@@ -80,7 +81,11 @@ class LeagueScrapper:
             )
         except TimeoutException:
             logger.warning(f"[league_id={self.league_id}] No matches found or timeout.")
-            return []
+            return MatchweekUrls(
+                matchweek=matchweek or 0,
+                urls=[],
+                matches_played=[],
+            )
 
         # 2. Iterate by index
         for index in range(total_matches):
@@ -91,10 +96,11 @@ class LeagueScrapper:
                         self._select_matchweek(matchweek)
 
                     logger.info(f"Processing match {index + 1}/{total_matches}...")
-                    match_url = self._extract_url_from_match_index(index)
+                    match_url, is_match_played = self._extract_url_from_match_index(index)
 
                     if match_url and match_url not in list_matchs_urls:
                         list_matchs_urls.append(match_url)
+                        list_matches_played.append(is_match_played)
                     done = True
                     break
                 except Exception as exc:
@@ -112,7 +118,11 @@ class LeagueScrapper:
         logger.info(
             f"[league_id={self.league_id}] Successfully scrapped {len(list_matchs_urls)} match URLs."
         )
-        return list_matchs_urls
+        return MatchweekUrls(
+            matchweek=matchweek or 0,
+            urls=list_matchs_urls,
+            matches_played=list_matches_played,
+        )
 
     def find_matchs_urls_all_matchweeks(self) -> LeagueMatchUrls:
         """
@@ -122,7 +132,7 @@ class LeagueScrapper:
         Returns:
             LeagueMatchUrls: Structured URLs grouped by matchweek.
         """
-        results: dict[int, list[str]] = {}
+        results: dict[int, MatchweekUrls] = {}
         total_matchweeks = self._get_matchweeks_count()
         logger.info(
             f"[league_id={self.league_id}] Found {total_matchweeks} matchweeks in selector."
@@ -169,7 +179,11 @@ class LeagueScrapper:
             f"[league_id={self.league_id}] Finished scraping all matchweeks: {sorted(results.keys())}"
         )
         ordered_matchweeks = [
-            MatchweekUrls(matchweek=week, urls=results[week])
+            MatchweekUrls(
+                matchweek=week,
+                urls=results[week].urls,
+                matches_played=results[week].matches_played,
+            )
             for week in sorted(results.keys())
         ]
         return LeagueMatchUrls(
@@ -307,7 +321,7 @@ class LeagueScrapper:
         elements = self._wait_for_scores_elements()
         return len(elements)
 
-    def _extract_url_from_match_index(self, index: int) -> str:
+    def _extract_url_from_match_index(self, index: int) -> tuple[str, bool]:
         """
         Performs the navigation sequence: Find List -> Click Item(i) -> Get URL -> Back.
 
@@ -315,7 +329,7 @@ class LeagueScrapper:
             index (int): The index of the match in the list.
 
         Returns:
-            str: The URL of the match.
+            tuple[str, bool]: The match URL and whether the match has already been played.
         """
         # A. Re-fetch the fresh list of elements
         scores = self._wait_for_scores_elements()
@@ -324,6 +338,7 @@ class LeagueScrapper:
             raise IndexError("Match index out of range (DOM might have changed).")
 
         target_score = scores[index]
+        is_match_played = _is_played_match(target_score.text or "")
 
         current_list_url = self.driver.current_url
 
@@ -342,7 +357,7 @@ class LeagueScrapper:
         # E. Wait for the list to reappear before returning control
         self._wait_for_list_to_reload()
 
-        return match_url
+        return match_url, is_match_played
 
     def _wait_for_scores_elements(self) -> list:
         """
@@ -394,8 +409,20 @@ def get_button_score_balise():
     ONLY_ALLOWED_CHARS = (
         f"string-length(translate(normalize-space(.), '{ALLOWED_SCORE_CHARS}', '')) = 0"
     )
-    SCORE_P_XPATH: str = f"//p[{HAS_DASH_SEPARATOR} and {ONLY_ALLOWED_CHARS}]"
+    IS_VS_LABEL = (
+        "translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') = 'vs'"
+    )
+    SCORE_P_XPATH: str = (
+        f"//p[({HAS_DASH_SEPARATOR} and {ONLY_ALLOWED_CHARS}) or {IS_VS_LABEL}]"
+    )
     return SCORE_P_XPATH
+
+
+def _is_played_match(match_text: str) -> bool:
+    """
+    Returns True when text looks like a played score (e.g. "2 - 1").
+    """
+    return bool(re.search(r"^\s*\d+\s*-\s*\d+\s*$", match_text))
 
 
 def wait_for_scores(driver: Chrome, timeout: int = 10) -> list:

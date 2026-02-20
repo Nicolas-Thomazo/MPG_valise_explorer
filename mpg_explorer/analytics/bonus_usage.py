@@ -20,9 +20,18 @@ def get_player_bonus_status(player_name: str, matches: list[Match]) -> PlayerBon
     played_set: set[BonusName] = set()
 
     for match in matches:
-        if match.home_team_name.strip().casefold() == normalized_player:
+        if not match.match_played:
+            continue
+
+        if (
+            match.home_team_name is not None
+            and match.home_team_name.strip().casefold() == normalized_player
+        ):
             played_set.update(match.home_bonus)
-        if match.visitor_team_name.strip().casefold() == normalized_player:
+        if (
+            match.visitor_team_name is not None
+            and match.visitor_team_name.strip().casefold() == normalized_player
+        ):
             played_set.update(match.visitor_bonus)
 
     played = [bonus for bonus in BonusName if bonus in played_set]
@@ -33,4 +42,3 @@ def get_player_bonus_status(player_name: str, matches: list[Match]) -> PlayerBon
         played=played,
         remaining=remaining,
     )
-

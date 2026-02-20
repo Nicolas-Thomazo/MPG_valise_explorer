@@ -80,6 +80,12 @@ def test_find_matchs_urls_all_matchweeks(logged_in_driver):
                 f"Week {matchweek}: URL does not belong to this matchweek: {url}"
             )
 
+    for matchweek_data in result.matchweeks:
+        assert len(matchweek_data.matches_played) == len(matchweek_data.urls), (
+            f"Week {matchweek_data.matchweek}: mismatch between URLs and played flags"
+        )
+        assert all(isinstance(status, bool) for status in matchweek_data.matches_played)
+
     if EXPECTED_MATCH_COUNT_BY_WEEK:
         for week, expected_count in EXPECTED_MATCH_COUNT_BY_WEEK.items():
             assert week in urls_by_matchweek, f"Week {week} was not scraped"

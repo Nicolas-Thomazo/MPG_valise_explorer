@@ -1,5 +1,6 @@
 import pytest
 from mpg_explorer.utils.driver import Driver
+from mpg_explorer.models.league_match_urls import MatchweekUrls
 from mpg_explorer.scrap.league import LeagueScrapper
 from mpg_explorer import logger
 
@@ -59,7 +60,9 @@ def test_find_matchs_urls_one_week(
     logger.info(f"Navigating to league page: {league_url}")
     league_scrapper = LeagueScrapper(driver=driver, season_nb=10, division=division)
     found_urls = league_scrapper.find_matchs_urls_one_week()
-    logger.info(f"URLs found: {found_urls}")
+    logger.info(f"URLs found: {found_urls.urls}")
 
-    assert isinstance(found_urls, list), "The output should be a list"
-    assert found_urls == list_expected_url
+    assert isinstance(found_urls, MatchweekUrls), "The output should be a MatchweekUrls"
+    assert found_urls.urls == list_expected_url
+    assert len(found_urls.matches_played) == len(found_urls.urls)
+    assert all(isinstance(status, bool) for status in found_urls.matches_played)
