@@ -17,6 +17,7 @@ from mpg_explorer import LEAGUE_CONFIG, logger
 from mpg_explorer.models.league_match_urls import LeagueMatchUrls, MatchweekUrls
 from mpg_explorer.models.match_result import Match
 from mpg_explorer.scrap.game_info import get_match_data
+from mpg_explorer.scrap.goals import get_goal_breakdown
 from mpg_explorer.storage.league_matches_parquet import (
     get_matchweeks_with_unplayed_matches,
     get_scraped_league_matches_parquet_path,
@@ -287,13 +288,23 @@ class LeagueScrapper:
                     try:
                         self.driver.get(match_url)
                         home_player, away_player = get_match_data(driver=self.driver)
+                        (
+                            home_mpg_goals,
+                            home_real_goals,
+                            away_mpg_goals,
+                            away_real_goals,
+                        ) = get_goal_breakdown(driver=self.driver)
                         row.update(
                             {
                                 "home_team_name": home_player.name,
                                 "home_total_goals": home_player.score,
+                                "home_mpg_goals": home_mpg_goals,
+                                "home_real_goals": home_real_goals,
                                 "home_bonus": [bonus.value for bonus in home_player.list_bonus],
                                 "visitor_team_name": away_player.name,
                                 "visitor_total_goals": away_player.score,
+                                "visitor_mpg_goals": away_mpg_goals,
+                                "visitor_real_goals": away_real_goals,
                                 "visitor_bonus": [
                                     bonus.value for bonus in away_player.list_bonus
                                 ],

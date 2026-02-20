@@ -1,6 +1,7 @@
 import pytest
 from mpg_explorer.utils.driver import Driver
-from mpg_explorer.scrap.game_info import get_match_data, PlayerResult
+from mpg_explorer.scrap.game_info import PlayerResult, get_match_data
+from mpg_explorer.scrap.goals import get_goal_breakdown
 from mpg_explorer.models.bonus import BonusName
 from mpg_explorer import logger
 
@@ -118,3 +119,25 @@ def test_mpg_match_data_extraction(
     logger.info(
         f"Validation successful for {home_player.name} vs {outside_player.name}"
     )
+
+
+@pytest.mark.end2end
+def test_goal_breakdown_extraction(logged_in_driver):
+    """
+    End-to-end test:
+        - Logs into MPG
+        - Navigates to a known match URL
+        - Validates MPG vs real goal counts for both teams
+    """
+    driver = logged_in_driver.driver
+    match_url = "https://mpg.football/mpg-match/league/mpg_division_NKU1UAPG_11_2/mpg_division_match_NKU1UAPG_11_2_8_2_5_3"
+
+    logger.info(f"Navigating to match for goal breakdown: {match_url}")
+    driver.get(match_url)
+
+    home_mpg, home_real, away_mpg, away_real = get_goal_breakdown(driver)
+
+    assert home_mpg == 0
+    assert home_real == 2
+    assert away_mpg == 1
+    assert away_real == 6
