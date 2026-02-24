@@ -2,6 +2,7 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "mpg-explorer",
+#     "polars",
 # ]
 #
 # [tool.uv.sources]
@@ -54,14 +55,11 @@ def load_matches_from_parquet(parquet_path: Path) -> pl.DataFrame:
 parquet_path = get_scraped_league_matches_parquet_path(
     league_id=LEAGUE_CONFIG.LEAGUE_ID,
     season_number=LEAGUE_CONFIG.SEASON_NUMBER,
-    division=2,
+    division=LEAGUE_CONFIG.DIVISION,
     data_path=LEAGUE_CONFIG.DATA_PATH,
 )
 
-# Option B: force a specific parquet
-# parquet_path = Path("data/league_NKU1UAPG_season_11_division_2.parquet")
-
-player_name = "KABZ"
+player_name = "FC Roro"
 
 # %%
 df = load_matches_from_parquet(parquet_path)

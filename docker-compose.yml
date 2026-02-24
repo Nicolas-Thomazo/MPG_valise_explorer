@@ -1,0 +1,12 @@
+---
+
+services:
+  mpg-explorer:
+    build:
+      context: .
+      dockerfile: dockerfiles/Dockerfile
+    image: mpg-explorer:latest
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
