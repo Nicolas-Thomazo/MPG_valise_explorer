@@ -94,3 +94,18 @@ def test_build_goals_plot_html_returns_empty_text_when_no_played_match():
         df=df,
     )
     assert "Aucun match joue pour tracer les buts." in html
+
+
+def test_build_goals_plot_html_contains_stack_and_team_colors():
+    pytest.importorskip("plotly")
+    df = _matches_df()
+    html = opponent_report._build_goals_plot_html(
+        my_team_name="Team A",
+        opponent_name="Team B",
+        df=df,
+    )
+    assert '"barmode":"stack"' in html
+    assert "#1d4ed8" in html
+    assert "#93c5fd" in html
+    assert "#b91c1c" in html
+    assert "#fca5a5" in html
