@@ -5,6 +5,8 @@ class MatchweekUrls(BaseModel):
     matchweek: int
     urls: list[str] = Field(default_factory=list)
     matches_played: list[bool] = Field(default_factory=list)
+    home_team_names: list[str | None] = Field(default_factory=list)
+    visitor_team_names: list[str | None] = Field(default_factory=list)
 
 
 class LeagueMatchUrls(BaseModel):

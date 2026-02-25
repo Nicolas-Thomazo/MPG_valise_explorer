@@ -5,6 +5,7 @@ from pathlib import Path
 import polars as pl
 
 from mpg_explorer import LEAGUE_CONFIG
+from mpg_explorer.models.match_dataframe import MatchColumn as MDC
 
 
 def get_league_matches_parquet_filename(
@@ -87,17 +88,31 @@ def get_matchweeks_with_unplayed_matches(
         return None
 
     df = pl.read_parquet(str(parquet_path))
-    required_columns = {"matchweek", "match_played", "error_in_scrapping"}
+    required_columns = {MDC.matchweek, MDC.match_played, MDC.error_in_scrapping}
     if not required_columns.issubset(set(df.columns)):
         return None
 
-    return (
-        df.filter(
-            (pl.col("match_played") == False) | (pl.col("error_in_scrapping") == True)
+    has_score_columns = {MDC.home_total_goals, MDC.visitor_total_goals}.issubset(
+        set(df.columns)
+    )
+    if has_score_columns:
+        pending_expr = (pl.col(MDC.error_in_scrapping) == True) | (
+            (pl.col(MDC.match_played) == False)
+            & (
+                pl.col(MDC.home_total_goals).is_null()
+                | pl.col(MDC.visitor_total_goals).is_null()
+            )
         )
-        .select("matchweek")
+    else:
+        pending_expr = (pl.col(MDC.match_played) == False) | (
+            pl.col(MDC.error_in_scrapping) == True
+        )
+
+    return (
+        df.filter(pending_expr)
+        .select(MDC.matchweek)
         .unique()
-        .sort("matchweek")
-        .get_column("matchweek")
+        .sort(MDC.matchweek)
+        .get_column(MDC.matchweek)
         .to_list()
     )

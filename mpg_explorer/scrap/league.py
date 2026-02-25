@@ -2,6 +2,7 @@
 
 import re
 from pathlib import Path
+from urllib.parse import urljoin
 from uuid import uuid4
 
 import polars as pl
@@ -14,7 +15,19 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 from mpg_explorer import LEAGUE_CONFIG, logger
+from mpg_explorer.analytics.league_refresh import (
+    align_dataframe_schema,
+    build_inferred_unplayed_rows,
+    build_pending_index_by_week,
+    cleanup_legacy_error_rows,
+    ensure_match_url_column,
+    extend_refresh_matchweeks_with_missing_weeks,
+    filter_matchweek_urls_to_pending,
+    get_pending_rows,
+    merge_refreshed_rows,
+)
 from mpg_explorer.models.league_match_urls import LeagueMatchUrls, MatchweekUrls
+from mpg_explorer.models.match_dataframe import MatchColumn as MDC
 from mpg_explorer.models.match_result import Match
 from mpg_explorer.scrap.game_info import get_match_data
 from mpg_explorer.scrap.goals import get_goal_breakdown
@@ -83,6 +96,8 @@ class LeagueScrapper:
         """
         list_matchs_urls: list[str] = []
         list_matches_played: list[bool] = []
+        list_home_team_names: list[str | None] = []
+        list_visitor_team_names: list[str | None] = []
 
         # 1. Get total count of matches
         try:
@@ -91,11 +106,27 @@ class LeagueScrapper:
                 f"[league_id={self.league_id}] Found {total_matches} matches to scrape."
             )
         except TimeoutException:
-            logger.warning(f"[league_id={self.league_id}] No matches found or timeout.")
+            logger.warning(
+                f"[league_id={self.league_id}] No visible matches found. Falling back to page source URL extraction."
+            )
+            extracted_urls = self._extract_match_urls_from_page_source()
+            if not extracted_urls:
+                logger.warning(
+                    f"[league_id={self.league_id}] No matches found or timeout."
+                )
+                return MatchweekUrls(
+                    matchweek=matchweek or 0,
+                    urls=[],
+                    matches_played=[],
+                    home_team_names=[],
+                    visitor_team_names=[],
+                )
             return MatchweekUrls(
                 matchweek=matchweek or 0,
-                urls=[],
-                matches_played=[],
+                urls=extracted_urls,
+                matches_played=[False] * len(extracted_urls),
+                home_team_names=[None] * len(extracted_urls),
+                visitor_team_names=[None] * len(extracted_urls),
             )
 
         # 2. Iterate by index
@@ -107,11 +138,18 @@ class LeagueScrapper:
                         self._select_matchweek(matchweek)
 
                     logger.info(f"Processing match {index + 1}/{total_matches}...")
-                    match_url, is_match_played = self._extract_url_from_match_index(index)
+                    (
+                        match_url,
+                        is_match_played,
+                        home_team_name,
+                        visitor_team_name,
+                    ) = self._extract_url_from_match_index(index)
 
                     if match_url and match_url not in list_matchs_urls:
                         list_matchs_urls.append(match_url)
                         list_matches_played.append(is_match_played)
+                        list_home_team_names.append(home_team_name)
+                        list_visitor_team_names.append(visitor_team_name)
                     done = True
                     break
                 except Exception as exc:
@@ -133,6 +171,8 @@ class LeagueScrapper:
             matchweek=matchweek or 0,
             urls=list_matchs_urls,
             matches_played=list_matches_played,
+            home_team_names=list_home_team_names,
+            visitor_team_names=list_visitor_team_names,
         )
 
     def find_matchs_urls_all_matchweeks(
@@ -237,6 +277,8 @@ class LeagueScrapper:
                 matchweek=week,
                 urls=results[week].urls,
                 matches_played=results[week].matches_played,
+                home_team_names=results[week].home_team_names,
+                visitor_team_names=results[week].visitor_team_names,
             )
             for week in sorted(results.keys())
         ]
@@ -271,18 +313,46 @@ class LeagueScrapper:
                 f"[matchweek={matchweek}] Scraping {len(matchweek_data.urls)} matches."
             )
 
-            for match_url, match_played in zip(
-                matchweek_data.urls, matchweek_data.matches_played, strict=True
+            for i, (match_url, match_played) in enumerate(
+                zip(matchweek_data.urls, matchweek_data.matches_played, strict=True)
             ):
+                home_team_name = (
+                    matchweek_data.home_team_names[i]
+                    if i < len(matchweek_data.home_team_names)
+                    else None
+                )
+                visitor_team_name = (
+                    matchweek_data.visitor_team_names[i]
+                    if i < len(matchweek_data.visitor_team_names)
+                    else None
+                )
                 row = Match(
                     match_id=str(uuid4()),
+                    match_url=match_url,
                     league_id=self.league_id,
                     division=self.division,
                     season_number=self.season_nb,
                     matchweek=matchweek,
                     match_played=match_played,
                     error_in_scrapping=False,
+                    home_team_name=home_team_name,
+                    visitor_team_name=visitor_team_name,
                 ).model_dump(mode="json")
+
+                if (
+                    row.get(MDC.home_team_name) is None
+                    or row.get(MDC.visitor_team_name) is None
+                ):
+                    (
+                        fallback_home_name,
+                        fallback_visitor_name,
+                    ) = self._extract_team_names_from_match_url(match_url)
+                    row[MDC.home_team_name] = (
+                        row.get(MDC.home_team_name) or fallback_home_name
+                    )
+                    row[MDC.visitor_team_name] = (
+                        row.get(MDC.visitor_team_name) or fallback_visitor_name
+                    )
 
                 if match_played:
                     try:
@@ -300,7 +370,9 @@ class LeagueScrapper:
                                 "home_total_goals": home_player.score,
                                 "home_mpg_goals": home_mpg_goals,
                                 "home_real_goals": home_real_goals,
-                                "home_bonus": [bonus.value for bonus in home_player.list_bonus],
+                                "home_bonus": [
+                                    bonus.value for bonus in home_player.list_bonus
+                                ],
                                 "visitor_team_name": away_player.name,
                                 "visitor_total_goals": away_player.score,
                                 "visitor_mpg_goals": away_mpg_goals,
@@ -314,8 +386,8 @@ class LeagueScrapper:
                         logger.warning(
                             f"[league_id={self.league_id}][matchweek={matchweek}] Failed to scrape match '{match_url}': {exc}"
                         )
-                        row["error_in_scrapping"] = True
-                        row["match_played"] = False
+                        row[MDC.error_in_scrapping] = True
+                        row[MDC.match_played] = False
                 rows.append(row)
 
         if not rows:
@@ -331,7 +403,9 @@ class LeagueScrapper:
         Behavior:
             - If no parquet exists, scrape all matchweeks.
             - If parquet lacks `match_played`, scrape all matchweeks.
-            - If no unplayed matches exist, reuse current parquet rows.
+            - If total scraped rows is lower than the expected season total,
+              refresh only the latest matchweeks needed to close the gap.
+            - If no unplayed matches and row count is complete, reuse current parquet rows.
             - Otherwise, scrape only matchweeks that still contain unplayed matches.
 
         Args:
@@ -358,6 +432,14 @@ class LeagueScrapper:
             return self.scrape_matches_dataframe(league_urls=league_urls)
 
         df_existing = pl.read_parquet(str(parquet_path))
+        df_existing = ensure_match_url_column(df_existing)
+        df_existing = cleanup_legacy_error_rows(
+            df_existing=df_existing,
+            nb_players=self.nb_players,
+            league_id=self.league_id,
+            logger=logger,
+        )
+        pending_rows = get_pending_rows(df_existing)
         matchweeks_to_refresh = get_matchweeks_with_unplayed_matches(
             league_id=self.league_id,
             season_number=self.season_nb,
@@ -374,6 +456,14 @@ class LeagueScrapper:
             )
             return self.scrape_matches_dataframe(league_urls=league_urls)
 
+        matchweeks_to_refresh = extend_refresh_matchweeks_with_missing_weeks(
+            df_existing=df_existing,
+            matchweeks_to_refresh=matchweeks_to_refresh,
+            nb_players=self.nb_players,
+            league_id=self.league_id,
+            logger=logger,
+        )
+
         if not matchweeks_to_refresh:
             logger.info(
                 f"[league_id={self.league_id}] No unplayed matches found in parquet. Reusing current data."
@@ -388,12 +478,59 @@ class LeagueScrapper:
             use_storage_verification=False,
             data_path=target_data_path,
         )
+        pending_index_by_week = build_pending_index_by_week(pending_rows)
         matchweeks_with_urls = [
-            matchweek_data for matchweek_data in league_urls.matchweeks if matchweek_data.urls
+            matchweek_data
+            for matchweek_data in league_urls.matchweeks
+            if matchweek_data.urls
         ]
         if not matchweeks_with_urls:
             logger.info(
-                f"[league_id={self.league_id}] No match URLs found for pending matchweeks. Keeping current parquet rows."
+                f"[league_id={self.league_id}] No match URLs found for pending matchweeks. "
+                "Trying inferred placeholders for unplayed matchweeks."
+            )
+            inferred_rows = build_inferred_unplayed_rows(
+                df_existing=df_existing,
+                target_matchweeks=matchweeks_to_refresh,
+                league_id=self.league_id,
+                division=self.division,
+                season_nb=self.season_nb,
+                nb_players=self.nb_players,
+                logger=logger,
+            )
+            if inferred_rows.is_empty():
+                logger.info(
+                    f"[league_id={self.league_id}] No inferred placeholders available. Keeping current parquet rows."
+                )
+                return df_existing
+
+            inferred_rows = align_dataframe_schema(
+                df=inferred_rows,
+                target_columns=df_existing.columns,
+            )
+            merged = merge_refreshed_rows(
+                df_existing=df_existing,
+                df_refresh=inferred_rows,
+            )
+            return ensure_match_url_column(merged)
+
+        matchweeks_with_urls = [
+            filter_matchweek_urls_to_pending(
+                matchweek_data=matchweek_data,
+                pending_index_by_week=pending_index_by_week,
+                league_id=self.league_id,
+                logger=logger,
+            )
+            for matchweek_data in matchweeks_with_urls
+        ]
+        matchweeks_with_urls = [
+            matchweek_data
+            for matchweek_data in matchweeks_with_urls
+            if matchweek_data.urls
+        ]
+        if not matchweeks_with_urls:
+            logger.info(
+                f"[league_id={self.league_id}] No pending matches left after row-level filtering. Keeping current parquet rows."
             )
             return df_existing
 
@@ -415,16 +552,13 @@ class LeagueScrapper:
             season_number=league_urls.season_number,
             matchweeks=matchweeks_with_urls,
         )
-        refreshed_matchweeks = [item.matchweek for item in matchweeks_with_urls]
         df_refresh = self.scrape_matches_dataframe(league_urls=filtered_league_urls)
 
-        return pl.concat(
-            [
-                df_existing.filter(~pl.col("matchweek").is_in(refreshed_matchweeks)),
-                df_refresh,
-            ],
-            how="vertical_relaxed",
+        merged = merge_refreshed_rows(
+            df_existing=df_existing,
+            df_refresh=df_refresh,
         )
+        return ensure_match_url_column(merged)
 
     def scrape_and_save_league(
         self, data_path: Path | None = None
@@ -456,23 +590,24 @@ class LeagueScrapper:
         """Build an empty match dataframe with a stable schema."""
         return pl.DataFrame(
             schema={
-                "match_id": pl.String,
-                "league_id": pl.String,
-                "division": pl.Int64,
-                "season_number": pl.Int64,
-                "matchweek": pl.Int64,
-                "match_played": pl.Boolean,
-                "error_in_scrapping": pl.Boolean,
-                "home_team_name": pl.String,
-                "home_total_goals": pl.Int64,
-                "home_mpg_goals": pl.Int64,
-                "home_real_goals": pl.Int64,
-                "home_bonus": pl.List(pl.String),
-                "visitor_team_name": pl.String,
-                "visitor_total_goals": pl.Int64,
-                "visitor_mpg_goals": pl.Int64,
-                "visitor_real_goals": pl.Int64,
-                "visitor_bonus": pl.List(pl.String),
+                MDC.match_id: pl.String,
+                MDC.match_url: pl.String,
+                MDC.league_id: pl.String,
+                MDC.division: pl.Int64,
+                MDC.season_number: pl.Int64,
+                MDC.matchweek: pl.Int64,
+                MDC.match_played: pl.Boolean,
+                MDC.error_in_scrapping: pl.Boolean,
+                MDC.home_team_name: pl.String,
+                MDC.home_total_goals: pl.Int64,
+                MDC.home_mpg_goals: pl.Int64,
+                MDC.home_real_goals: pl.Int64,
+                MDC.home_bonus: pl.List(pl.String),
+                MDC.visitor_team_name: pl.String,
+                MDC.visitor_total_goals: pl.Int64,
+                MDC.visitor_mpg_goals: pl.Int64,
+                MDC.visitor_real_goals: pl.Int64,
+                MDC.visitor_bonus: pl.List(pl.String),
             }
         )
 
@@ -484,9 +619,12 @@ class LeagueScrapper:
         ]
 
         button = None
-        for attempt in range(2):
+        for attempt in range(3):
             if "results" not in self.driver.current_url:
                 self.driver.get(self.results_link)
+
+            # Close potential stale overlays before opening the dropdown.
+            ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
 
             for xpath in dropdown_button_xpath_candidates:
                 try:
@@ -495,7 +633,8 @@ class LeagueScrapper:
                     )
                     elements = self.driver.find_elements(By.XPATH, xpath)
                     button = next(
-                        (element for element in elements if element.is_displayed()), None
+                        (element for element in elements if element.is_displayed()),
+                        None,
                     )
                     if button is not None:
                         break
@@ -511,22 +650,78 @@ class LeagueScrapper:
                 f"Could not find matchweek dropdown button on {self.driver.current_url}."
             )
 
-        self.driver.execute_script(
-            "arguments[0].scrollIntoView({block: 'center'});", button
-        )
-        try:
-            WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable(button))
-            button.click()
-        except Exception:
-            self.driver.execute_script("arguments[0].click();", button)
-        self._wait_for_matchweek_options()
+        open_last_error: Exception | None = None
+        for _ in range(3):
+            self.driver.execute_script(
+                "arguments[0].scrollIntoView({block: 'center'});", button
+            )
+            try:
+                WebDriverWait(self.driver, 5).until(
+                    lambda d: button.is_displayed() and button.is_enabled()
+                )
+                try:
+                    button.click()
+                except Exception:
+                    # Fallbacks for flaky react/styled buttons.
+                    self.driver.execute_script("arguments[0].click();", button)
 
-    def _wait_for_matchweek_options(self) -> list:
-        """Waits for matchweek dropdown options to be present."""
-        options_xpath = "//ul[@role='listbox']//li[@role='option']"
-        return WebDriverWait(self.driver, 10).until(
-            EC.presence_of_all_elements_located((By.XPATH, options_xpath))
+                # If the menu does not open, try keyboard activation.
+                if not self._wait_for_matchweek_options(
+                    timeout=4, raise_on_timeout=False
+                ):
+                    button.send_keys(Keys.ENTER)
+                    if not self._wait_for_matchweek_options(
+                        timeout=3, raise_on_timeout=False
+                    ):
+                        button.send_keys(Keys.SPACE)
+
+                self._wait_for_matchweek_options(timeout=6)
+                return
+            except Exception as exc:
+                open_last_error = exc
+                # Re-acquire button if DOM re-rendered.
+                for xpath in dropdown_button_xpath_candidates:
+                    elements = self.driver.find_elements(By.XPATH, xpath)
+                    button = next(
+                        (element for element in elements if element.is_displayed()),
+                        button,
+                    )
+                    if button is not None:
+                        break
+
+        raise TimeoutException(
+            f"Could not open matchweek dropdown on {self.driver.current_url}. "
+            f"Last error: {open_last_error}"
         )
+
+    def _wait_for_matchweek_options(
+        self, timeout: int = 10, raise_on_timeout: bool = True
+    ) -> list:
+        """Wait for visible matchweek options in the dropdown.
+
+        Supports both strict listbox semantics and more permissive role-based options
+        to handle minor MPG frontend changes.
+        """
+        options_xpaths = [
+            "//ul[@role='listbox']//li[@role='option']",
+            "//*[@role='listbox']//*[@role='option']",
+            "//*[@role='option']",
+        ]
+
+        def _find_visible_options(driver):
+            for xpath in options_xpaths:
+                options = driver.find_elements(By.XPATH, xpath)
+                visible_options = [opt for opt in options if opt.is_displayed()]
+                if visible_options:
+                    return visible_options
+            return False
+
+        try:
+            return WebDriverWait(self.driver, timeout).until(_find_visible_options)
+        except TimeoutException:
+            if raise_on_timeout:
+                raise
+            return []
 
     def _get_matchweeks_count(self) -> int:
         """Returns the number of available matchweeks in the dropdown."""
@@ -593,63 +788,85 @@ class LeagueScrapper:
 
     def _get_matches_count(self) -> int:
         """
-        Waits for the score elements to appear and returns the count.
+        Waits for match entries to appear and returns the count.
 
         Returns:
             int: Number of match elements visible.
         """
-        elements = self._wait_for_scores_elements()
+        elements = self._wait_for_match_entries_elements()
         return len(elements)
 
-    def _extract_url_from_match_index(self, index: int) -> tuple[str, bool]:
+    def _extract_url_from_match_index(
+        self, index: int
+    ) -> tuple[str, bool, str | None, str | None]:
         """
-        Performs the navigation sequence: Find List -> Click Item(i) -> Get URL -> Back.
+        Resolve one match URL and metadata from the list page.
 
         Args:
             index (int): The index of the match in the list.
 
         Returns:
-            tuple[str, bool]: The match URL and whether the match has already been played.
+            tuple[str, bool, str | None, str | None]:
+                match URL, played flag, home team name, visitor team name.
         """
-        # A. Re-fetch the fresh list of elements
-        scores = self._wait_for_scores_elements()
+        entries = self._wait_for_match_entries_elements()
 
-        if index >= len(scores):
+        if index >= len(entries):
             raise IndexError("Match index out of range (DOM might have changed).")
 
-        target_score = scores[index]
-        is_match_played = _is_played_match(target_score.text or "")
+        target_entry = entries[index]
+        entry_text = target_entry.text or ""
+        is_match_played = _is_played_match(entry_text)
+        home_team_name, visitor_team_name = _extract_team_names_from_text(entry_text)
+
+        href = target_entry.get_attribute("href")
+        if href and "mpg-match" in href:
+            return href, is_match_played, home_team_name, visitor_team_name
 
         current_list_url = self.driver.current_url
 
-        # B. Ensure clickable and click
-        self._click_score_element(target_score)
+        self._click_score_element(target_entry)
 
-        # C. Capture URL after navigation to match page
         WebDriverWait(self.driver, 8).until(
             lambda d: "mpg-match" in d.current_url and d.current_url != current_list_url
         )
         match_url = self.driver.current_url
+        if home_team_name is None or visitor_team_name is None:
+            home_from_title, visitor_from_title = _extract_team_names_from_text(
+                self.driver.title or ""
+            )
+            home_team_name = home_team_name or home_from_title
+            visitor_team_name = visitor_team_name or visitor_from_title
 
-        # D. Go Back to the list
         self.driver.back()
-
-        # E. Wait for the list to reappear before returning control
         self._wait_for_list_to_reload()
 
-        return match_url, is_match_played
+        return match_url, is_match_played, home_team_name, visitor_team_name
 
-    def _wait_for_scores_elements(self) -> list:
+    def _wait_for_match_entries_elements(self) -> list:
         """
-        Wraps the wait logic to retrieve score elements.
-        Replaces the standalone 'wait_for_scores' function.
+        Return visible match entry elements.
+
+        It first searches score/`vs` labels and then falls back to direct match links
+        to support unplayed matchweeks where score cards may be absent.
         """
-        # Remplacez ceci par votre appel existant: return wait_for_scores(self.driver)
-        # Voici une implémentation standard basée sur votre xpath:
-        xpath = get_button_score_balise()  # Supposé importé
-        return WebDriverWait(self.driver, 12).until(
-            EC.visibility_of_all_elements_located((By.XPATH, xpath))
-        )
+        score_xpath = get_button_score_balise()
+        link_xpath = get_match_link_balise()
+
+        def _find_visible_entries(driver):
+            score_elements = driver.find_elements(By.XPATH, score_xpath)
+            visible_scores = [elem for elem in score_elements if elem.is_displayed()]
+            if visible_scores:
+                return visible_scores
+
+            link_elements = driver.find_elements(By.XPATH, link_xpath)
+            visible_links = [elem for elem in link_elements if elem.is_displayed()]
+            if visible_links:
+                return visible_links
+
+            return False
+
+        return WebDriverWait(self.driver, 12).until(_find_visible_entries)
 
     def _click_score_element(self, element):
         """Scrolls to element and clicks it."""
@@ -664,10 +881,43 @@ class LeagueScrapper:
 
     def _wait_for_list_to_reload(self):
         """Waits for the main list container to be present again after navigation."""
-        xpath = get_button_score_balise()
-        WebDriverWait(self.driver, 15).until(
-            EC.presence_of_element_located((By.XPATH, xpath))
-        )
+        self._wait_for_match_entries_elements()
+
+    def _extract_match_urls_from_page_source(self) -> list[str]:
+        """Extract direct match URLs from current page source as a fallback."""
+        html = self.driver.page_source or ""
+        found = re.findall(r"/mpg-match/league/[a-zA-Z0-9_/-]+", html)
+        if not found:
+            return []
+        unique_urls: list[str] = []
+        seen: set[str] = set()
+        for raw_url in found:
+            normalized = urljoin("https://mpg.football", raw_url)
+            if normalized in seen:
+                continue
+            seen.add(normalized)
+            unique_urls.append(normalized)
+        return unique_urls
+
+    def _extract_team_names_from_match_url(
+        self, match_url: str
+    ) -> tuple[str | None, str | None]:
+        """Open one match URL and try to extract home/visitor names."""
+        try:
+            self.driver.get(match_url)
+        except Exception:
+            return None, None
+
+        text_candidates = [self.driver.title or ""]
+        for xpath in ("//h1", "//h2", "//p"):
+            elements = self.driver.find_elements(By.XPATH, xpath)
+            text_candidates.extend((elem.text or "") for elem in elements[:6])
+
+        for text in text_candidates:
+            home, visitor = _extract_team_names_from_text(text)
+            if home and visitor:
+                return home, visitor
+        return None, None
 
 
 ##########################
@@ -689,9 +939,7 @@ def get_button_score_balise():
     ONLY_ALLOWED_CHARS = (
         f"string-length(translate(normalize-space(.), '{ALLOWED_SCORE_CHARS}', '')) = 0"
     )
-    IS_VS_LABEL = (
-        "translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') = 'vs'"
-    )
+    IS_VS_LABEL = "translate(normalize-space(.), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz') = 'vs'"
     SCORE_P_XPATH: str = (
         f"//p[({HAS_DASH_SEPARATOR} and {ONLY_ALLOWED_CHARS}) or {IS_VS_LABEL}]"
     )
@@ -700,9 +948,32 @@ def get_button_score_balise():
 
 def _is_played_match(match_text: str) -> bool:
     """
-    Returns True when text looks like a played score (e.g. "2 - 1").
+    Returns True when text contains a played score (e.g. "2 - 1").
     """
-    return bool(re.search(r"^\s*\d+\s*-\s*\d+\s*$", match_text))
+    return bool(re.search(r"\b\d+\s*-\s*\d+\b", match_text))
+
+
+def _extract_team_names_from_text(raw_text: str) -> tuple[str | None, str | None]:
+    """Extract home and visitor names from a text block containing 'vs' or score."""
+    lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    if len(lines) < 3:
+        return None, None
+
+    marker_index = None
+    for idx, line in enumerate(lines):
+        if line.casefold() == "vs" or _is_played_match(line):
+            marker_index = idx
+            break
+
+    if marker_index is None or marker_index == 0 or marker_index >= len(lines) - 1:
+        return None, None
+
+    return lines[marker_index - 1], lines[marker_index + 1]
+
+
+def get_match_link_balise() -> str:
+    """Get XPath selecting direct match links from the results page."""
+    return "//a[contains(@href, '/mpg-match/')]"
 
 
 def wait_for_scores(driver: Chrome, timeout: int = 10) -> list:

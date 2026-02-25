@@ -168,3 +168,5 @@ cython_debug/
 uv.lock
 
 data/
+.DS_Store
+*.tar

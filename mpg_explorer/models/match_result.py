@@ -11,6 +11,7 @@ class Match(BaseModel):
     """
 
     match_id: str
+    match_url: str | None = None
     league_id: str
     division: int
     season_number: int

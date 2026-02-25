@@ -25,7 +25,7 @@ my_driver.login_mpg(
 )
 
 # %%
-league = LeagueScrapper(driver=my_driver.driver, division=2)
+league = LeagueScrapper(driver=my_driver.driver, division=LEAGUE_CONFIG.DIVISION)
 df_league, parquet_path = league.scrape_and_save_league(
     data_path=LEAGUE_CONFIG.DATA_PATH
 )
