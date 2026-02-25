@@ -31,7 +31,9 @@ def build_html_report(
     my_team_name: str,
     opponent_name: str,
     next_match: dict[str, object],
+    my_remaining_bonus: list[str],
     remaining_bonus: list[str],
+    opponent_defense_bonus_usage: dict[str, int],
     goals_plot_html: str,
 ) -> str:
     """Build the full HTML document for next-opponent analysis.
@@ -40,7 +42,10 @@ def build_html_report(
         my_team_name: Team configured as the user's team.
         opponent_name: Name of the upcoming opponent.
         next_match: Next match row with canonical `MatchColumn` keys.
+        my_remaining_bonus: User team bonuses not yet used in played matches.
         remaining_bonus: Opponent bonuses not yet used in played matches.
+        opponent_defense_bonus_usage: Number of uses for opponent tactical
+            bonuses (`4 défenseurs`, `5 défenseurs`).
         goals_plot_html: Plotly HTML fragment already generated for goals.
 
     Returns:
@@ -52,7 +57,10 @@ def build_html_report(
         f" vs {next_match.get(MDC.visitor_team_name, '-')}"
     )
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
+    my_remaining_bonus_html = _render_remaining_bonus_badges(my_remaining_bonus)
     remaining_bonus_html = _render_remaining_bonus_badges(remaining_bonus)
+    four_def_count = int(opponent_defense_bonus_usage.get("4 défenseurs", 0))
+    five_def_count = int(opponent_defense_bonus_usage.get("5 défenseurs", 0))
     return f"""<!doctype html>
 <html lang="fr">
 <head>
@@ -76,8 +84,13 @@ def build_html_report(
   <p><strong>{escape(match_line)}</strong></p>
   <p class="muted">Genere le {escape(generated_at)}</p>
 
+  <h2>Mes bonus restants</h2>
+  {my_remaining_bonus_html}
+
   <h2>Bonus restants de l'adversaire</h2>
   {remaining_bonus_html}
+  <p><strong>4 défenseurs (adversaire):</strong> {four_def_count}</p>
+  <p><strong>5 défenseurs (adversaire):</strong> {five_def_count}</p>
 
   <h2>Buts (reels vs MPG) sur toutes les journees</h2>
   <div class="plot">{goals_plot_html}</div>

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import polars as pl
 
-from mpg_explorer.models.bonus import BonusName
+from mpg_explorer.models.bonus import BonusName, get_bonus_name
 from mpg_explorer.models.match_dataframe import MatchColumn as MDC
 from mpg_explorer.reports.opponent_html import (
     build_error_html_report,
@@ -14,6 +14,7 @@ from mpg_explorer.reports.opponent_html import (
 )
 from mpg_explorer.reports.opponent_plots import (
     _build_goals_plot_html,
+    _extract_team_goals,
 )
 
 
@@ -167,6 +168,37 @@ def collect_bonus_usage(
     return usage
 
 
+def _count_defense_bonus_usage(df: pl.DataFrame, team_name: str) -> dict[str, int]:
+    """Count opponent usage of `4 défenseurs` and `5 défenseurs`.
+
+    Args:
+        df: League matches dataframe containing canonical `MatchColumn` fields.
+        team_name: Team for which tactical defense bonuses must be counted.
+
+    Returns:
+        Dictionary with keys `4 défenseurs` and `5 défenseurs`.
+    """
+    counts = {
+        BonusName.four_defense.value: 0,
+        BonusName.five_defense.value: 0,
+    }
+    played_rows = (
+        df.filter(pl.col(MDC.match_played) == True)
+        .sort(MDC.matchweek)
+        .iter_rows(named=True)
+    )
+    for row in played_rows:
+        if not _is_team_match(row, team_name):
+            continue
+        for raw_bonus in _team_bonus_for_row(row, team_name):
+            bonus = get_bonus_name(raw_bonus)
+            if bonus == BonusName.four_defense:
+                counts[BonusName.four_defense.value] += 1
+            elif bonus == BonusName.five_defense:
+                counts[BonusName.five_defense.value] += 1
+    return counts
+
+
 def export_opponent_report_html(
     df: pl.DataFrame,
     my_team_name: str,
@@ -190,8 +222,13 @@ def export_opponent_report_html(
     opponent_name = _get_opponent_name(next_match, my_team_name)
 
     used_bonus = collect_bonus_usage(df=df, team_name=opponent_name)
+    my_used_bonus = collect_bonus_usage(df=df, team_name=my_team_name)
     all_bonus = [bonus.value for bonus in BonusName]
+    my_remaining_bonus = [bonus for bonus in all_bonus if bonus not in my_used_bonus]
     remaining_bonus = [bonus for bonus in all_bonus if bonus not in used_bonus]
+    opponent_defense_bonus_usage = _count_defense_bonus_usage(
+        df=df, team_name=opponent_name
+    )
     goals_plot_html = _build_goals_plot_html(
         my_team_name=my_team_name,
         opponent_name=opponent_name,
@@ -202,7 +239,9 @@ def export_opponent_report_html(
         my_team_name=my_team_name,
         opponent_name=opponent_name,
         next_match=next_match,
+        my_remaining_bonus=my_remaining_bonus,
         remaining_bonus=remaining_bonus,
+        opponent_defense_bonus_usage=opponent_defense_bonus_usage,
         goals_plot_html=goals_plot_html,
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)

@@ -72,6 +72,8 @@ def _build_goals_plot_html(my_team_name: str, opponent_name: str, df: pl.DataFra
     For each matchweek, the chart displays two adjacent bars:
     one bar for `my_team_name` and one bar for `opponent_name`.
     Each bar is stacked with two colored segments: real goals and MPG goals.
+    A line trace is also added for each team to connect the top of stacked bars
+    (team total goals per matchweek).
 
     Args:
         my_team_name: Team configured as the user's team.
@@ -100,7 +102,6 @@ def _build_goals_plot_html(my_team_name: str, opponent_name: str, df: pl.DataFra
     my_by_week = {int(row["matchweek"]): row for row in my_rows}
     opponent_by_week = {int(row["matchweek"]): row for row in opponent_rows}
     weeks = sorted(set(my_by_week) | set(opponent_by_week))
-    x_labels = [f"J{week}" for week in weeks]
 
     my_real = [int(my_by_week.get(week, {}).get("real_goals", 0)) for week in weeks]
     my_mpg = [int(my_by_week.get(week, {}).get("mpg_goals", 0)) for week in weeks]
@@ -110,55 +111,104 @@ def _build_goals_plot_html(my_team_name: str, opponent_name: str, df: pl.DataFra
     opp_mpg = [
         int(opponent_by_week.get(week, {}).get("mpg_goals", 0)) for week in weeks
     ]
+    x_my = [week - 0.2 for week in weeks]
+    x_opp = [week + 0.2 for week in weeks]
+    tick_text = [f"J{week}" for week in weeks]
 
     fig = go.Figure()
+    my_real_color = "#1d4ed8"
+    my_mpg_color = "#93c5fd"
+    opp_real_color = "#b91c1c"
+    opp_mpg_color = "#fca5a5"
+    my_line_color = "#1e3a8a"
+    opponent_line_color = "#7f1d1d"
+
     fig.add_bar(
         name=f"{my_team_name} - Buts reels",
-        x=x_labels,
+        x=x_my,
         y=my_real,
-        marker_color="#1d4ed8",
+        marker_color=my_real_color,
+        width=0.36,
         offsetgroup="my_team",
         legendgroup="my_team",
         hovertemplate=(
-            f"Equipe: {escape(my_team_name)}<br>Journee: %{{x}}"
+            f"Equipe: {escape(my_team_name)}<br>Journee: J%{{customdata}}"
             "<br>Buts reels: %{y}<extra></extra>"
         ),
+        customdata=weeks,
     )
     fig.add_bar(
         name=f"{my_team_name} - Buts MPG",
-        x=x_labels,
+        x=x_my,
         y=my_mpg,
-        marker_color="#93c5fd",
+        marker_color=my_mpg_color,
+        width=0.36,
         offsetgroup="my_team",
         legendgroup="my_team",
         hovertemplate=(
-            f"Equipe: {escape(my_team_name)}<br>Journee: %{{x}}"
+            f"Equipe: {escape(my_team_name)}<br>Journee: J%{{customdata}}"
             "<br>Buts MPG: %{y}<extra></extra>"
         ),
+        customdata=weeks,
     )
     fig.add_bar(
         name=f"{opponent_name} - Buts reels",
-        x=x_labels,
+        x=x_opp,
         y=opp_real,
-        marker_color="#b91c1c",
+        marker_color=opp_real_color,
+        width=0.36,
         offsetgroup="opponent_team",
         legendgroup="opponent_team",
         hovertemplate=(
-            f"Equipe: {escape(opponent_name)}<br>Journee: %{{x}}"
+            f"Equipe: {escape(opponent_name)}<br>Journee: J%{{customdata}}"
             "<br>Buts reels: %{y}<extra></extra>"
         ),
+        customdata=weeks,
     )
     fig.add_bar(
         name=f"{opponent_name} - Buts MPG",
-        x=x_labels,
+        x=x_opp,
         y=opp_mpg,
-        marker_color="#fca5a5",
+        marker_color=opp_mpg_color,
+        width=0.36,
         offsetgroup="opponent_team",
         legendgroup="opponent_team",
         hovertemplate=(
-            f"Equipe: {escape(opponent_name)}<br>Journee: %{{x}}"
+            f"Equipe: {escape(opponent_name)}<br>Journee: J%{{customdata}}"
             "<br>Buts MPG: %{y}<extra></extra>"
         ),
+        customdata=weeks,
+    )
+
+    my_total = [real + mpg for real, mpg in zip(my_real, my_mpg, strict=False)]
+    opp_total = [real + mpg for real, mpg in zip(opp_real, opp_mpg, strict=False)]
+    fig.add_scatter(
+        name=f"{my_team_name} - Total",
+        x=x_my,
+        y=my_total,
+        mode="lines+markers",
+        line={"color": my_line_color, "width": 2},
+        marker={"size": 7},
+        legendgroup="my_team_total",
+        hovertemplate=(
+            f"Equipe: {escape(my_team_name)}<br>Journee: J%{{customdata}}"
+            "<br>Total buts: %{y}<extra></extra>"
+        ),
+        customdata=weeks,
+    )
+    fig.add_scatter(
+        name=f"{opponent_name} - Total",
+        x=x_opp,
+        y=opp_total,
+        mode="lines+markers",
+        line={"color": opponent_line_color, "width": 2},
+        marker={"size": 7},
+        legendgroup="opponent_team_total",
+        hovertemplate=(
+            f"Equipe: {escape(opponent_name)}<br>Journee: J%{{customdata}}"
+            "<br>Total buts: %{y}<extra></extra>"
+        ),
+        customdata=weeks,
     )
     fig.update_layout(
         barmode="stack",
@@ -170,4 +220,5 @@ def _build_goals_plot_html(my_team_name: str, opponent_name: str, df: pl.DataFra
         legend_title="Equipe et type de but",
         height=560,
     )
+    fig.update_xaxes(tickmode="array", tickvals=weeks, ticktext=tick_text)
     return fig.to_html(full_html=False, include_plotlyjs="cdn")

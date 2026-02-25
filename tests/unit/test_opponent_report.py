@@ -15,7 +15,7 @@ def _matches_df() -> pl.DataFrame:
             "match_played": [True, True, False, True],
             "home_team_name": ["Team A", "Team C", "Team A", "Team B"],
             "visitor_team_name": ["Team C", "Team A", "Team B", "Team C"],
-            "home_bonus": [["Zahia"], [], [], ["Miroir"]],
+            "home_bonus": [["Zahia"], [], [], ["Miroir", "4 défenseurs", "5 défenseurs"]],
             "visitor_bonus": [[], ["McDo+"], [], []],
             "home_real_goals": [1, 0, 0, 2],
             "home_mpg_goals": [1, 0, 0, 0],
@@ -50,6 +50,13 @@ def test_collect_bonus_usage_for_one_team():
     assert usage["McDo+"][0]["opponent"] == "Team C"
 
 
+def test_count_defense_bonus_usage_for_opponent():
+    df = _matches_df()
+    counts = opponent_report._count_defense_bonus_usage(df=df, team_name="Team B")
+    assert counts["4 défenseurs"] == 1
+    assert counts["5 défenseurs"] == 1
+
+
 def test_extract_team_goals_handles_home_and_away_rows():
     df = _matches_df()
     rows = opponent_report._extract_team_goals(df=df, team_name="Team A")
@@ -81,7 +88,10 @@ def test_export_opponent_report_html_writes_html_without_tables(
 
     html = report_path.read_text(encoding="utf-8")
     assert opponent_name == "Team B"
+    assert "Mes bonus restants" in html
     assert "Bonus restants de l'adversaire" in html
+    assert "4 défenseurs (adversaire):</strong> 1" in html
+    assert "5 défenseurs (adversaire):</strong> 1" in html
     assert "mock plotly chart" in html
     assert "<table" not in html.lower()
 
@@ -109,3 +119,5 @@ def test_build_goals_plot_html_contains_stack_and_team_colors():
     assert "#93c5fd" in html
     assert "#b91c1c" in html
     assert "#fca5a5" in html
+    assert "Team A - Total" in html
+    assert "Team B - Total" in html
