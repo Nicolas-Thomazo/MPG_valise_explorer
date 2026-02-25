@@ -1,7 +1,7 @@
 import polars as pl
 
 from mpg_explorer.models.match_dataframe import MatchColumn as MDC
-from mpg_explorer.storage.league_matches_parquet import (
+from mpg_explorer.storage.utils import (
     get_matchweeks_with_unplayed_matches,
 )
 

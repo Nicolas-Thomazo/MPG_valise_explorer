@@ -10,3 +10,4 @@ pydantic-settings
 azure-storage-blob
 pandas
 kestra
+plotly

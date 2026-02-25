@@ -31,7 +31,7 @@ from mpg_explorer.models.match_dataframe import MatchColumn as MDC
 from mpg_explorer.models.match_result import Match
 from mpg_explorer.scrap.game_info import get_match_data
 from mpg_explorer.scrap.goals import get_goal_breakdown
-from mpg_explorer.storage.league_matches_parquet import (
+from mpg_explorer.storage.utils import (
     get_matchweeks_with_unplayed_matches,
     get_scraped_league_matches_parquet_path,
     save_scraped_league_matches_to_parquet,
