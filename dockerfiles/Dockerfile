@@ -25,4 +25,5 @@ RUN uv venv && \
 RUN mkdir -p /app/data /app/data/reports
 
 ENTRYPOINT ["python"]
-CMD ["notebooks/player_bonus_status.py"]
+# CMD ["python", "notebooks/player_bonus_status.py"]
+CMD ["tail", "-f", "/dev/null"]
