@@ -8,4 +8,5 @@ services:
       - ./data:/app/data
     env_file:
       - .env
-    # command: ["notebooks/player_bonus_status.py"]
+    environment:
+      DATA_PATH: /app/data

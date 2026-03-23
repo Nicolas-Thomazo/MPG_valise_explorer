@@ -3,6 +3,9 @@ FROM python:3.12-slim-bookworm
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
+ENV PATH="/app/.venv/bin:$PATH" \
+    DATA_PATH="/app/data"
+
 COPY pyproject.toml pyproject.toml
 COPY requirements.txt requirements.txt
 
@@ -19,8 +22,7 @@ COPY notebooks notebooks
 RUN uv venv && \
     uv pip install .
 
-ENV PATH="/app/.venv/bin:$PATH"
+RUN mkdir -p /app/data /app/data/reports
 
-
-CMD ["tail", "-f", "/dev/null"]
-# CMD ["notebooks/player_bonus_status.py"]
+ENTRYPOINT ["python"]
+CMD ["notebooks/player_bonus_status.py"]
