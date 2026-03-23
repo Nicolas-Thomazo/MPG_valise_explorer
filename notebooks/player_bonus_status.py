@@ -52,6 +52,7 @@ except ValueError as exc:
 
 logger.info(f"HTML report exported to: {report_path}")
 
-report_path
 
+with open(report_path, "r") as f:
+    print(f.read())
 # %%
