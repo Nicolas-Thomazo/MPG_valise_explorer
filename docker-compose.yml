@@ -6,7 +6,7 @@ services:
       dockerfile: dockerfiles/Dockerfile
     image: mpg-explorer:latest
     volumes:
-      - ./data:/app/data
+      - mpg_data:/app/data
     environment:
       DATA_PATH: /app/data
       MPG_USERNAME: ${MPG_USERNAME}
@@ -17,3 +17,11 @@ services:
       DIVISION: ${DIVISION}
       NUMBER_PLAYERS: ${NUMBER_PLAYERS}
       USE_DOCKER: ${USE_DOCKER}
+
+volumes:
+  mpg_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${MPG_DATA_PATH}
