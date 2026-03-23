@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[project]
+name="mpg-explorer"
+version="0.1.0"
+dynamic = ["dependencies"]
+authors=[{name:"Matthieu Colin"},{name:"Nicolas Thomazo"}]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+markers = [
+  "end2end: end-to-end selenium tests",
+]
