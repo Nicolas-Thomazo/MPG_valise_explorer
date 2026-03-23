@@ -1,5 +1,6 @@
 services:
   mpg-explorer:
+    container_name: mpg-explorer
     build:
       context: .
       dockerfile: dockerfiles/Dockerfile
