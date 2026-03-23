@@ -9,7 +9,7 @@ where = ["."]
 name="mpg-explorer"
 version="0.1.0"
 dynamic = ["dependencies"]
-authors=[{name:"Matthieu Colin"},{name:"Nicolas Thomazo"}]
+authors=[{name="Matthieu Colin"},{name="Nicolas Thomazo"}]
 
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
