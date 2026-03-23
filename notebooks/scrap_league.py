@@ -18,7 +18,7 @@ from mpg_explorer.utils.driver import Driver
 
 # %%
 logger.info("Scrapping data from MPG")
-my_driver = Driver(docker=False)
+my_driver = Driver(docker=LEAGUE_CONFIG.IS_DOCKER)
 my_driver.login_mpg(
     user=LEAGUE_CONFIG.MPG_USERNAME,
     password=LEAGUE_CONFIG.MPG_PASSWORD,

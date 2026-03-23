@@ -16,7 +16,7 @@ from mpg_explorer.utils.driver import Driver
 match_url = "https://mpg.football/mpg-match/league/mpg_division_NKU1UAPG_11_1/mpg_division_match_NKU1UAPG_11_1_6_3_3_2"
 
 logger.info(f"Scrapping data from match url {match_url}")
-my_driver = Driver(docker=False)
+my_driver = Driver(docker=LEAGUE_CONFIG.IS_DOCKER)
 my_driver.login_mpg(
     user=LEAGUE_CONFIG.MPG_USERNAME, password=LEAGUE_CONFIG.MPG_PASSWORD
 )

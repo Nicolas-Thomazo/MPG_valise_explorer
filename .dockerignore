@@ -1,0 +1,14 @@
+.git
+.gitignore
+.pytest_cache
+.venv
+.vscode
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.egg-info
+.DS_Store
+data
+mpg-explorer_latest.tar
+MPG_SQL_Tables.png:Zone.Identifier
