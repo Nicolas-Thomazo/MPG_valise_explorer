@@ -2,7 +2,7 @@ beautifulsoup4
 selenium
 webdriver_manager
 lxml
-polars
+polars[rtcompat]
 duckdb
 pyarrow
 pydantic
