@@ -6,9 +6,9 @@ services:
       dockerfile: dockerfiles/Dockerfile
     image: mpg-explorer:latest
     volumes:
-      - mpg_data:/app/data
+      - mpg_data:/app/data_kestra
     environment:
-      DATA_PATH: /app/data
+      DATA_PATH: /app/data_kestra
       MPG_USERNAME: ${MPG_USERNAME}
       MPG_PASSWORD: ${MPG_PASSWORD}
       LEAGUE_ID: ${LEAGUE_ID}
