@@ -22,8 +22,8 @@ COPY notebooks notebooks
 RUN uv venv && \
     uv pip install .
 
-RUN mkdir -p /app/data /app/data/reports
+RUN mkdir -p /app/data /app/data/reports /app/data_kestra
 
 # ENTRYPOINT ["python"]
-CMD ["python", "notebooks/player_bonus_status.py"]
-# CMD ["tail", "-f", "/dev/null"]
+# CMD ["python", "notebooks/player_bonus_status.py"]
+CMD ["tail", "-f", "/dev/null"]
