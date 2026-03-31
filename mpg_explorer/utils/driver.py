@@ -20,6 +20,10 @@ class Driver:
             self.chrome_options.add_argument("--headless")
             self.chrome_options.add_argument("--disable-dev-shm-usage")
             self.chrome_options.page_load_strategy = "normal"
+            self.chrome_options.add_argument("--window-size=1920,1080")
+            self.chrome_options.add_argument(
+                "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+            )
 
         self.driver = webdriver.Chrome(
             options=self.chrome_options,
