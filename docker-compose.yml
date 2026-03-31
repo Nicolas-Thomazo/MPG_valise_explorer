@@ -17,6 +17,7 @@ services:
       DIVISION: ${DIVISION}
       NUMBER_PLAYERS: ${NUMBER_PLAYERS}
       USE_DOCKER: ${USE_DOCKER}
+    command: ["python", "notebooks/scrap_league.py"]
 
 volumes:
   mpg_data:
