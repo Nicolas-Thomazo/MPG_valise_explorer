@@ -19,6 +19,7 @@ class Driver:
             self.chrome_options.add_argument("--no-sandbox")
             self.chrome_options.add_argument("--headless")
             self.chrome_options.add_argument("--disable-dev-shm-usage")
+            self.chrome_options.add_argument("--disable-gpu")
             self.chrome_options.page_load_strategy = "normal"
             self.chrome_options.add_argument("--window-size=1920,1080")
             self.chrome_options.add_argument(
@@ -86,3 +87,8 @@ class Driver:
             EC.element_to_be_clickable((By.XPATH, "//*[text()='Se connecter']"))
         )
         element.click()
+
+        WebDriverWait(self.driver, 20).until(
+            lambda d: "auth/login" not in d.current_url
+            and not d.find_elements(By.ID, "username")
+        )

@@ -625,6 +625,12 @@ class LeagueScrapper:
         for attempt in range(3):
             if "results" not in self.driver.current_url:
                 self.driver.get(self.results_link)
+                current_url = (self.driver.current_url or "").rstrip("/")
+                if current_url == "https://mpg.football":
+                    raise TimeoutException(
+                        "Could not reach the MPG results page after navigation. "
+                        "The session is likely unauthenticated or expired."
+                    )
 
             # Close potential stale overlays before opening the dropdown.
             ActionChains(self.driver).send_keys(Keys.ESCAPE).perform()
@@ -768,7 +774,6 @@ class LeagueScrapper:
             self.driver.get(self.results_link)
 
         if self._get_selected_matchweek() == matchweek:
-            self._wait_for_match_entries_elements()
             return
 
         self._open_matchweek_dropdown()
