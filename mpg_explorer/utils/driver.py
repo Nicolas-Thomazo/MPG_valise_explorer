@@ -89,7 +89,7 @@ class Driver:
             EC.element_to_be_clickable((By.XPATH, "//*[text()='Se connecter']"))
         )
         element.click()
-
+        logger.info(LEAGUE_CONFIG)
         path = Path("/app/data_kestra")
         filename = path / "error_screenshot.png"
         logger.info(f"THIS IS THE SNAPSHOT SAVE {filename}")
