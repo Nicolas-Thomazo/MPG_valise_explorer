@@ -1,0 +1,41 @@
+id: mpg_explorer_scrapping
+namespace: company.team
+
+description: This flow will scrap the league data.
+
+tasks:
+  - id: mpg_scrapping
+    type: io.kestra.plugin.scripts.python.Commands
+    namespaceFiles:
+      enabled: false 
+    taskRunner:
+      type: io.kestra.plugin.scripts.runner.docker.Docker
+      volumes:
+        - /mnt/appdata/apps/mpg-explorer-data:/app/data_kestra
+    containerImage: mpg-explorer:latest
+    env:
+      DATA_PATH: /app/data_kestra
+      MPG_USERNAME: "{{ kv('MPG_USERNAME') }}"
+      MPG_PASSWORD: "{{ secret('MPG_PASSWORD') }}"
+      LEAGUE_ID: "{{ kv('LEAGUE_ID') }}"
+      TEAM_NAME: "{{ kv('TEAM_NAME') }}"
+      SEASON_NUMBER: "{{ kv('SEASON_NUMBER') }}"
+      DIVISION: "{{ kv('DIVISION') }}"
+      NUMBER_PLAYERS: "{{ kv('NUMBER_PLAYERS') }}"
+      USE_DOCKER: "True"
+    commands:
+      - python /app/notebooks/scrap_league.py
+    #   - cp /app/data_kestra/reports/next_opponent_report.html output_report.html
+    # outputFiles:
+    #   - "output_report.html"
+
+  # - id: send_email
+  #   type: io.kestra.plugin.email.MailSend
+  #   to: nicolas.thomazo@outlook.com
+  #   from: "{{ secret('GMAIL_USERNAME') }}"
+  #   subject: "Rapport prochain adversaire MPG"
+  #   host: smtp.gmail.com
+  #   port: 465
+  #   username: "{{ secret('GMAIL_USERNAME') }}"
+  #   password: "{{ secret('GMAIL_PASSWORD') }}"
+  #   htmlTextContent: "{{ read(outputs.get_next_opponent.outputFiles['output_report.html']) }}"
