@@ -231,25 +231,27 @@ def cleanup_legacy_error_rows(
     return cleaned
 
 
-def _row_identity_key(row: dict) -> tuple[str, int | None, str]:
-    """Build a stable identity key for one match row."""
+def _row_identity_keys(row: dict) -> set[tuple[str, int | None, str]]:
+    """Build all stable identity keys available for one match row."""
+    keys: set[tuple[str, int | None, str]] = set()
     matchweek = row.get(MDC.matchweek)
+    week = int(matchweek) if matchweek is not None else None
+
     match_url = row.get(MDC.match_url)
     if isinstance(match_url, str) and match_url.strip():
-        return (
-            "url",
-            int(matchweek) if matchweek is not None else None,
-            match_url.strip(),
-        )
+        keys.add(("url", week, match_url.strip()))
 
     home_name = row.get(MDC.home_team_name)
     visitor_name = row.get(MDC.visitor_team_name)
     if isinstance(home_name, str) and isinstance(visitor_name, str):
         pair_key = team_pair_key(home_name=home_name, visitor_name=visitor_name)
-        return ("pair", int(matchweek) if matchweek is not None else None, pair_key)
+        keys.add(("pair", week, pair_key))
+
+    if keys:
+        return keys
 
     match_id = str(row.get(MDC.match_id, ""))
-    return ("id", int(matchweek) if matchweek is not None else None, match_id)
+    return {("id", week, match_id)}
 
 
 def merge_refreshed_rows(
@@ -260,11 +262,13 @@ def merge_refreshed_rows(
         return df_existing
 
     refresh_rows = list(df_refresh.iter_rows(named=True))
-    refresh_keys = {_row_identity_key(row) for row in refresh_rows}
+    refresh_keys = {
+        key for row in refresh_rows for key in _row_identity_keys(row)
+    }
     kept_rows = [
         row
         for row in df_existing.iter_rows(named=True)
-        if _row_identity_key(row) not in refresh_keys
+        if _row_identity_keys(row).isdisjoint(refresh_keys)
     ]
     merged_rows = kept_rows + refresh_rows
     merged = pl.DataFrame(merged_rows)

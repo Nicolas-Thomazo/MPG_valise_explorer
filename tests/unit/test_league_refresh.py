@@ -99,6 +99,42 @@ def test_merge_refreshed_rows_replaces_only_matching_row():
     assert updated.select(MDC.match_played).item() is True
 
 
+def test_merge_refreshed_rows_replaces_pending_pair_without_url():
+    df_existing = ensure_match_url_column(
+        pl.DataFrame(
+            {
+                MDC.match_id: ["pending-a", "pending-b", "done-c"],
+                MDC.matchweek: [10, 10, 9],
+                MDC.match_url: [None, None, "u9"],
+                MDC.home_team_name: ["NIKEU", "KABZ", "FC Roro"],
+                MDC.visitor_team_name: ["FC Roro", "Baptoz", "NIKEU"],
+                MDC.match_played: [False, False, True],
+                MDC.error_in_scrapping: [False, False, False],
+            }
+        )
+    )
+    df_refresh = pl.DataFrame(
+        {
+            MDC.match_id: ["played-a"],
+            MDC.matchweek: [10],
+            MDC.match_url: ["u10-a"],
+            MDC.home_team_name: ["NIKEU"],
+            MDC.visitor_team_name: ["FC Roro"],
+            MDC.match_played: [True],
+            MDC.error_in_scrapping: [False],
+        }
+    )
+
+    merged = merge_refreshed_rows(df_existing=df_existing, df_refresh=df_refresh)
+
+    assert merged.height == 3
+    assert merged.filter(pl.col(MDC.match_id) == "pending-a").height == 0
+    assert merged.filter(pl.col(MDC.match_id) == "pending-b").height == 1
+    refreshed = merged.filter(pl.col(MDC.match_url) == "u10-a")
+    assert refreshed.height == 1
+    assert refreshed.select(MDC.match_played).item() is True
+
+
 def test_build_inferred_unplayed_rows_mirrors_home_away():
     df_existing = pl.DataFrame(
         {

@@ -99,6 +99,9 @@ class LeagueScrapper:
         list_home_team_names: list[str | None] = []
         list_visitor_team_names: list[str | None] = []
 
+        if matchweek is not None:
+            self._select_matchweek(matchweek)
+
         # 1. Get total count of matches
         try:
             total_matches = self._get_matches_count()
@@ -134,16 +137,15 @@ class LeagueScrapper:
             done = False
             for _ in range(3):
                 try:
-                    if matchweek is not None:
-                        self._select_matchweek(matchweek)
-
                     logger.info(f"Processing match {index + 1}/{total_matches}...")
                     (
                         match_url,
                         is_match_played,
                         home_team_name,
                         visitor_team_name,
-                    ) = self._extract_url_from_match_index(index)
+                    ) = self._extract_url_from_match_index(
+                        index, matchweek=matchweek
+                    )
 
                     if match_url and match_url not in list_matchs_urls:
                         list_matchs_urls.append(match_url)
@@ -154,10 +156,11 @@ class LeagueScrapper:
                     break
                 except Exception as exc:
                     logger.error(f"Failed to scrape match at index {index}: {exc}")
-                    # Try to recover navigation if we are stuck on a sub-page
-                    if "mpg-match" in self.driver.current_url:
-                        self.driver.back()
-                    self._wait_for_list_to_reload()
+                    self.driver.get(self.results_link)
+                    if matchweek is not None:
+                        self._select_matchweek(matchweek)
+                    else:
+                        self._wait_for_list_to_reload()
                     continue
             if not done:
                 logger.warning(
@@ -741,8 +744,33 @@ class LeagueScrapper:
             return None
         return int(match.group(1))
 
+    def _get_selected_matchweek(self) -> int | None:
+        """Returns the currently selected matchweek from the dropdown button."""
+        dropdown_button_xpath = "//button[@aria-haspopup='listbox' and @type='button']"
+        buttons = self.driver.find_elements(By.XPATH, dropdown_button_xpath)
+        button = next((element for element in buttons if element.is_displayed()), None)
+        if button is None:
+            return None
+
+        text = button.text or ""
+        parsed = self._extract_matchweek_from_label(text)
+        if parsed is not None:
+            return parsed
+
+        numbers = re.findall(r"\d+", text)
+        if not numbers:
+            return None
+        return int(numbers[0])
+
     def _select_matchweek(self, matchweek: int):
         """Selects a specific matchweek from the dropdown."""
+        if "results" not in self.driver.current_url:
+            self.driver.get(self.results_link)
+
+        if self._get_selected_matchweek() == matchweek:
+            self._wait_for_match_entries_elements()
+            return
+
         self._open_matchweek_dropdown()
         option_xpath = f"//ul[@role='listbox']//li[@role='option' and .//*[contains(normalize-space(.), 'Journée {matchweek}')]]"
         option = WebDriverWait(self.driver, 10).until(
@@ -797,7 +825,7 @@ class LeagueScrapper:
         return len(elements)
 
     def _extract_url_from_match_index(
-        self, index: int
+        self, index: int, matchweek: int | None = None
     ) -> tuple[str, bool, str | None, str | None]:
         """
         Resolve one match URL and metadata from the list page.
@@ -838,8 +866,11 @@ class LeagueScrapper:
             home_team_name = home_team_name or home_from_title
             visitor_team_name = visitor_team_name or visitor_from_title
 
-        self.driver.back()
-        self._wait_for_list_to_reload()
+        self.driver.get(self.results_link)
+        if matchweek is not None:
+            self._select_matchweek(matchweek)
+        else:
+            self._wait_for_list_to_reload()
 
         return match_url, is_match_played, home_team_name, visitor_team_name
 
