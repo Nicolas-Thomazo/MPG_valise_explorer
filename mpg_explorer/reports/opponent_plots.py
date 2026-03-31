@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from html import escape
+import base64
+from io import BytesIO
 
 import polars as pl
 
@@ -67,7 +68,7 @@ def _extract_team_goals(df: pl.DataFrame, team_name: str) -> list[dict[str, obje
 
 
 def _build_goals_plot_html(my_team_name: str, opponent_name: str, df: pl.DataFrame) -> str:
-    """Build one Plotly bar chart comparing both teams for every matchweek.
+    """Build one PNG chart comparing both teams for every matchweek.
 
     For each matchweek, the chart displays two adjacent bars:
     one bar for `my_team_name` and one bar for `opponent_name`.
@@ -81,11 +82,12 @@ def _build_goals_plot_html(my_team_name: str, opponent_name: str, df: pl.DataFra
         df: League matches dataframe using canonical `MatchColumn` fields.
 
     Returns:
-        Plotly HTML fragment (no full document) or a text fallback when no played
-        match exists for both teams.
+        HTML fragment containing an embedded PNG image, or a text fallback when
+        no played match exists for both teams.
 
     Raises:
-        RuntimeError: If `plotly` is not installed and a chart must be rendered.
+        RuntimeError: If `matplotlib` is not installed and a chart must be
+            rendered.
     """
     my_rows = _extract_team_goals(df=df, team_name=my_team_name)
     opponent_rows = _extract_team_goals(df=df, team_name=opponent_name)
@@ -93,10 +95,11 @@ def _build_goals_plot_html(my_team_name: str, opponent_name: str, df: pl.DataFra
         return "<p>Aucun match joue pour tracer les buts.</p>"
 
     try:
-        import plotly.graph_objects as go
+        import matplotlib.pyplot as plt
+        from matplotlib.lines import Line2D
     except ModuleNotFoundError as exc:
         raise RuntimeError(
-            "Le package `plotly` est requis pour generer le report."
+            "Le package `matplotlib` est requis pour generer le report."
         ) from exc
 
     my_by_week = {int(row["matchweek"]): row for row in my_rows}
@@ -111,114 +114,105 @@ def _build_goals_plot_html(my_team_name: str, opponent_name: str, df: pl.DataFra
     opp_mpg = [
         int(opponent_by_week.get(week, {}).get("mpg_goals", 0)) for week in weeks
     ]
-    x_my = [week - 0.2 for week in weeks]
-    x_opp = [week + 0.2 for week in weeks]
+    x_positions = list(range(len(weeks)))
+    bar_width = 0.36
+    x_my = [pos - (bar_width / 2) for pos in x_positions]
+    x_opp = [pos + (bar_width / 2) for pos in x_positions]
     tick_text = [f"J{week}" for week in weeks]
-
-    fig = go.Figure()
     my_real_color = "#1d4ed8"
     my_mpg_color = "#93c5fd"
     opp_real_color = "#b91c1c"
     opp_mpg_color = "#fca5a5"
     my_line_color = "#1e3a8a"
     opponent_line_color = "#7f1d1d"
-
-    fig.add_bar(
-        name=f"{my_team_name} - Buts reels",
-        x=x_my,
-        y=my_real,
-        marker_color=my_real_color,
-        width=0.36,
-        offsetgroup="my_team",
-        legendgroup="my_team",
-        hovertemplate=(
-            f"Equipe: {escape(my_team_name)}<br>Journee: J%{{customdata}}"
-            "<br>Buts reels: %{y}<extra></extra>"
-        ),
-        customdata=weeks,
-    )
-    fig.add_bar(
-        name=f"{my_team_name} - Buts MPG",
-        x=x_my,
-        y=my_mpg,
-        marker_color=my_mpg_color,
-        width=0.36,
-        offsetgroup="my_team",
-        legendgroup="my_team",
-        hovertemplate=(
-            f"Equipe: {escape(my_team_name)}<br>Journee: J%{{customdata}}"
-            "<br>Buts MPG: %{y}<extra></extra>"
-        ),
-        customdata=weeks,
-    )
-    fig.add_bar(
-        name=f"{opponent_name} - Buts reels",
-        x=x_opp,
-        y=opp_real,
-        marker_color=opp_real_color,
-        width=0.36,
-        offsetgroup="opponent_team",
-        legendgroup="opponent_team",
-        hovertemplate=(
-            f"Equipe: {escape(opponent_name)}<br>Journee: J%{{customdata}}"
-            "<br>Buts reels: %{y}<extra></extra>"
-        ),
-        customdata=weeks,
-    )
-    fig.add_bar(
-        name=f"{opponent_name} - Buts MPG",
-        x=x_opp,
-        y=opp_mpg,
-        marker_color=opp_mpg_color,
-        width=0.36,
-        offsetgroup="opponent_team",
-        legendgroup="opponent_team",
-        hovertemplate=(
-            f"Equipe: {escape(opponent_name)}<br>Journee: J%{{customdata}}"
-            "<br>Buts MPG: %{y}<extra></extra>"
-        ),
-        customdata=weeks,
-    )
-
     my_total = [real + mpg for real, mpg in zip(my_real, my_mpg, strict=False)]
     opp_total = [real + mpg for real, mpg in zip(opp_real, opp_mpg, strict=False)]
-    fig.add_scatter(
-        name=f"{my_team_name} - Total",
-        x=x_my,
-        y=my_total,
-        mode="lines+markers",
-        line={"color": my_line_color, "width": 2},
-        marker={"size": 7},
-        legendgroup="my_team_total",
-        hovertemplate=(
-            f"Equipe: {escape(my_team_name)}<br>Journee: J%{{customdata}}"
-            "<br>Total buts: %{y}<extra></extra>"
-        ),
-        customdata=weeks,
+
+    fig, ax = plt.subplots(figsize=(11, 6))
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
+
+    ax.bar(
+        x_my,
+        my_real,
+        width=bar_width,
+        color=my_real_color,
+        label=f"{my_team_name} - Buts reels",
     )
-    fig.add_scatter(
-        name=f"{opponent_name} - Total",
-        x=x_opp,
-        y=opp_total,
-        mode="lines+markers",
-        line={"color": opponent_line_color, "width": 2},
-        marker={"size": 7},
-        legendgroup="opponent_team_total",
-        hovertemplate=(
-            f"Equipe: {escape(opponent_name)}<br>Journee: J%{{customdata}}"
-            "<br>Total buts: %{y}<extra></extra>"
-        ),
-        customdata=weeks,
+    ax.bar(
+        x_my,
+        my_mpg,
+        width=bar_width,
+        bottom=my_real,
+        color=my_mpg_color,
+        label=f"{my_team_name} - Buts MPG",
     )
-    fig.update_layout(
-        barmode="stack",
-        bargap=0.2,
-        bargroupgap=0.05,
-        title=f"Buts par journee - {my_team_name} vs {opponent_name}",
-        xaxis_title="Journee",
-        yaxis_title="Nombre de buts",
-        legend_title="Equipe et type de but",
-        height=560,
+    ax.bar(
+        x_opp,
+        opp_real,
+        width=bar_width,
+        color=opp_real_color,
+        label=f"{opponent_name} - Buts reels",
     )
-    fig.update_xaxes(tickmode="array", tickvals=weeks, ticktext=tick_text)
-    return fig.to_html(full_html=False, include_plotlyjs="cdn")
+    ax.bar(
+        x_opp,
+        opp_mpg,
+        width=bar_width,
+        bottom=opp_real,
+        color=opp_mpg_color,
+        label=f"{opponent_name} - Buts MPG",
+    )
+
+    ax.plot(
+        x_my,
+        my_total,
+        color=my_line_color,
+        marker="o",
+        linewidth=2,
+        label=f"{my_team_name} - Total",
+    )
+    ax.plot(
+        x_opp,
+        opp_total,
+        color=opponent_line_color,
+        marker="o",
+        linewidth=2,
+        label=f"{opponent_name} - Total",
+    )
+
+    ax.set_title(f"Buts par journee - {my_team_name} vs {opponent_name}")
+    ax.set_xlabel("Journee")
+    ax.set_ylabel("Nombre de buts")
+    ax.set_xticks(x_positions)
+    ax.set_xticklabels(tick_text)
+    ax.grid(axis="y", linestyle="--", linewidth=0.8, alpha=0.35)
+    ax.set_axisbelow(True)
+
+    legend_handles = [
+        plt.Rectangle((0, 0), 1, 1, color=my_real_color, label=f"{my_team_name} - Buts reels"),
+        plt.Rectangle((0, 0), 1, 1, color=my_mpg_color, label=f"{my_team_name} - Buts MPG"),
+        Line2D([0], [0], color=my_line_color, marker="o", linewidth=2, label=f"{my_team_name} - Total"),
+        plt.Rectangle((0, 0), 1, 1, color=opp_real_color, label=f"{opponent_name} - Buts reels"),
+        plt.Rectangle((0, 0), 1, 1, color=opp_mpg_color, label=f"{opponent_name} - Buts MPG"),
+        Line2D([0], [0], color=opponent_line_color, marker="o", linewidth=2, label=f"{opponent_name} - Total"),
+    ]
+    ax.legend(
+        handles=legend_handles,
+        title="Equipe et type de but",
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.14),
+        ncol=2,
+        frameon=False,
+    )
+
+    buffer = BytesIO()
+    fig.tight_layout()
+    fig.savefig(buffer, format="png", dpi=160, bbox_inches="tight")
+    plt.close(fig)
+    encoded_image = base64.b64encode(buffer.getvalue()).decode("ascii")
+    return (
+        "<img "
+        f"src=\"data:image/png;base64,{encoded_image}\" "
+        "alt=\"Graphique des buts reels et MPG\" "
+        "style=\"max-width:100%;height:auto;display:block\" />"
+    )

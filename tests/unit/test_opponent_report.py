@@ -77,7 +77,9 @@ def test_export_opponent_report_html_writes_html_without_tables(
     monkeypatch.setattr(
         opponent_report,
         "_build_goals_plot_html",
-        lambda my_team_name, opponent_name, df: "<div>mock plotly chart</div>",
+        lambda my_team_name, opponent_name, df: (
+            "<img src=\"data:image/png;base64,mock-image\" alt=\"mock chart\" />"
+        ),
     )
 
     report_path, opponent_name = opponent_report.export_opponent_report_html(
@@ -92,7 +94,7 @@ def test_export_opponent_report_html_writes_html_without_tables(
     assert "Bonus restants de l'adversaire" in html
     assert "4 défenseurs (adversaire):</strong> 1" in html
     assert "5 défenseurs (adversaire):</strong> 1" in html
-    assert "mock plotly chart" in html
+    assert "data:image/png;base64,mock-image" in html
     assert "<table" not in html.lower()
 
 
@@ -106,18 +108,14 @@ def test_build_goals_plot_html_returns_empty_text_when_no_played_match():
     assert "Aucun match joue pour tracer les buts." in html
 
 
-def test_build_goals_plot_html_contains_stack_and_team_colors():
-    pytest.importorskip("plotly")
+def test_build_goals_plot_html_returns_embedded_png_image():
+    pytest.importorskip("matplotlib")
     df = _matches_df()
     html = opponent_report._build_goals_plot_html(
         my_team_name="Team A",
         opponent_name="Team B",
         df=df,
     )
-    assert '"barmode":"stack"' in html
-    assert "#1d4ed8" in html
-    assert "#93c5fd" in html
-    assert "#b91c1c" in html
-    assert "#fca5a5" in html
-    assert "Team A - Total" in html
-    assert "Team B - Total" in html
+    assert html.startswith("<img ")
+    assert "data:image/png;base64," in html
+    assert "alt=\"Graphique des buts reels et MPG\"" in html

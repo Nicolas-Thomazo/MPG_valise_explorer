@@ -3,7 +3,7 @@
 # dependencies = [
 #     "mpg-explorer",
 #     "polars",
-#     "plotly",
+#     "matplotlib",
 # ]
 #
 # [tool.uv.sources]
@@ -53,6 +53,4 @@ except ValueError as exc:
 logger.info(f"HTML report exported to: {report_path}")
 
 
-with open(report_path, "r") as f:
-    print(f.read())
 # %%
