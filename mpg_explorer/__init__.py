@@ -1,3 +1,4 @@
+import sys
 from logging import basicConfig, getLogger
 from pathlib import Path
 
@@ -34,7 +35,7 @@ class LeagueConfig(BaseSettings):
     AZURE_STORAGE_CONNECTION_STRING: str | None = None
 
 
-LEAGUE_CONFIG = LeagueConfig()
+LEAGUE_CONFIG = LeagueConfig()  # type: ignore
 
 # Root-level folder for local data exports (configurable via LeagueConfig).
 DATA_PATH = LEAGUE_CONFIG.DATA_PATH
@@ -43,6 +44,7 @@ DATA_PATH.mkdir(parents=True, exist_ok=True)
 
 basicConfig(
     level="INFO",
+    stream=sys.stdout,
     format="%(levelname)s - %(message)s",  # %(asctime)s
 )
 logger = getLogger("mpg-explorer")
