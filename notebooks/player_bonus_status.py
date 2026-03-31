@@ -21,7 +21,6 @@ from mpg_explorer.storage.utils import (
     get_scraped_league_matches_parquet_path,
 )
 
-
 # %%
 parquet_path = get_scraped_league_matches_parquet_path(
     league_id=LEAGUE_CONFIG.LEAGUE_ID,

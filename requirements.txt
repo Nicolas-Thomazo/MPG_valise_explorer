@@ -13,3 +13,4 @@ pandas
 kestra
 plotly
 matplotlib
+pillow

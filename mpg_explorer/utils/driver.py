@@ -1,6 +1,6 @@
 """Module to handle the Selenium WebDriver for MPG website automation."""
 
-import logging
+from mpg_explorer import logger
 
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
@@ -8,6 +8,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from mpg_explorer import LEAGUE_CONFIG
+
+from pathlib import Path
 
 
 class Driver:
@@ -39,9 +41,9 @@ class Driver:
         try:
             accept_button_id = "didomi-notice-agree-button"
             self.driver.find_element(By.ID, accept_button_id).click()
-            logging.info("Bingo, cookies accepted!")
+            logger.info("Bingo, cookies accepted!")
         except Exception:
-            logging.info("No cookie banner detected, continuing")
+            logger.info("No cookie banner detected, continuing")
 
     def login_mpg(
         self,
@@ -88,7 +90,18 @@ class Driver:
         )
         element.click()
 
+        path = Path(
+            "/Users/nicolasthomazo/Documents/Code/MPG_valise_explorer/mpg_explorer"
+        )
+        filename = path / "error_screenshot.png"
+        logger.info(f"THIS IS THE SNAPSHOT SAVE {filename}")
+        self.driver.save_screenshot(filename)
+        with open(path / "error_page.html", "w") as f:
+            f.write(self.driver.page_source)
+
         WebDriverWait(self.driver, 20).until(
-            lambda d: "auth/login" not in d.current_url
-            and not d.find_elements(By.ID, "username")
+            lambda d: (
+                "auth/login" not in d.current_url
+                and not d.find_elements(By.ID, "username")
+            )
         )
