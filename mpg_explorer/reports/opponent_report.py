@@ -168,6 +168,20 @@ def collect_bonus_usage(
     return usage
 
 
+def _remaining_limited_bonus(
+    used_bonus: dict[str, list[dict[str, object]]],
+) -> list[str]:
+    """Return remaining single-use bonuses, excluding reusable defense bonuses."""
+    excluded_bonus = {
+        BonusName.four_defense.value,
+        BonusName.five_defense.value,
+    }
+    all_bonus = [
+        bonus.value for bonus in BonusName if bonus.value not in excluded_bonus
+    ]
+    return [bonus for bonus in all_bonus if bonus not in used_bonus]
+
+
 def _count_defense_bonus_usage(df: pl.DataFrame, team_name: str) -> dict[str, int]:
     """Count opponent usage of `4 défenseurs` and `5 défenseurs`.
 
@@ -223,9 +237,8 @@ def export_opponent_report_html(
 
     used_bonus = collect_bonus_usage(df=df, team_name=opponent_name)
     my_used_bonus = collect_bonus_usage(df=df, team_name=my_team_name)
-    all_bonus = [bonus.value for bonus in BonusName]
-    my_remaining_bonus = [bonus for bonus in all_bonus if bonus not in my_used_bonus]
-    remaining_bonus = [bonus for bonus in all_bonus if bonus not in used_bonus]
+    my_remaining_bonus = _remaining_limited_bonus(my_used_bonus)
+    remaining_bonus = _remaining_limited_bonus(used_bonus)
     opponent_defense_bonus_usage = _count_defense_bonus_usage(
         df=df, team_name=opponent_name
     )

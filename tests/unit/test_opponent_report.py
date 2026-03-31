@@ -57,6 +57,15 @@ def test_count_defense_bonus_usage_for_opponent():
     assert counts["5 défenseurs"] == 1
 
 
+def test_remaining_limited_bonus_excludes_reusable_defense_bonus():
+    remaining = opponent_report._remaining_limited_bonus(
+        used_bonus={"Zahia": [{"matchweek": 1, "opponent": "Team C"}]}
+    )
+    assert "Zahia" not in remaining
+    assert "4 défenseurs" not in remaining
+    assert "5 défenseurs" not in remaining
+
+
 def test_extract_team_goals_handles_home_and_away_rows():
     df = _matches_df()
     rows = opponent_report._extract_team_goals(df=df, team_name="Team A")
@@ -64,9 +73,11 @@ def test_extract_team_goals_handles_home_and_away_rows():
     assert rows[0]["matchweek"] == 1
     assert rows[0]["real_goals"] == 1
     assert rows[0]["mpg_goals"] == 1
+    assert rows[0]["match_result"] == "WIN"
     assert rows[1]["matchweek"] == 2
     assert rows[1]["real_goals"] == 2
     assert rows[1]["mpg_goals"] == 1
+    assert rows[1]["match_result"] == "WIN"
 
 
 def test_export_opponent_report_html_writes_html_without_tables(
@@ -92,8 +103,10 @@ def test_export_opponent_report_html_writes_html_without_tables(
     assert opponent_name == "Team B"
     assert "Mes bonus restants" in html
     assert "Bonus restants de l'adversaire" in html
-    assert "4 défenseurs (adversaire):</strong> 1" in html
-    assert "5 défenseurs (adversaire):</strong> 1" in html
+    assert "Utilisations adverses de 4 défenseurs:</strong> 1" in html
+    assert "Utilisations adverses de 5 défenseurs:</strong> 1" in html
+    assert "<span class='badge bonus'>4 défenseurs</span>" not in html
+    assert "<span class='badge bonus'>5 défenseurs</span>" not in html
     assert "data:image/png;base64,mock-image" in html
     assert "<table" not in html.lower()
 

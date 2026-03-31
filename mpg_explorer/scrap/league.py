@@ -94,10 +94,11 @@ class LeagueScrapper:
         Returns:
             MatchweekUrls: Matchweek payload with URLs and played status list.
         """
-        list_matchs_urls: list[str] = []
+        list_matchs_urls: list[str | None] = []
         list_matches_played: list[bool] = []
         list_home_team_names: list[str | None] = []
         list_visitor_team_names: list[str | None] = []
+        seen_entries: set[tuple[str, str | None, str | None]] = set()
 
         if matchweek is not None:
             self._select_matchweek(matchweek)
@@ -147,7 +148,13 @@ class LeagueScrapper:
                         index, matchweek=matchweek
                     )
 
-                    if match_url and match_url not in list_matchs_urls:
+                    entry_key = (
+                        "url" if match_url else "pair",
+                        match_url or home_team_name,
+                        None if match_url else visitor_team_name,
+                    )
+                    if entry_key not in seen_entries:
+                        seen_entries.add(entry_key)
                         list_matchs_urls.append(match_url)
                         list_matches_played.append(is_match_played)
                         list_home_team_names.append(home_team_name)
@@ -831,7 +838,7 @@ class LeagueScrapper:
 
     def _extract_url_from_match_index(
         self, index: int, matchweek: int | None = None
-    ) -> tuple[str, bool, str | None, str | None]:
+    ) -> tuple[str | None, bool, str | None, str | None]:
         """
         Resolve one match URL and metadata from the list page.
 
@@ -839,7 +846,7 @@ class LeagueScrapper:
             index (int): The index of the match in the list.
 
         Returns:
-            tuple[str, bool, str | None, str | None]:
+            tuple[str | None, bool, str | None, str | None]:
                 match URL, played flag, home team name, visitor team name.
         """
         entries = self._wait_for_match_entries_elements()
@@ -855,6 +862,9 @@ class LeagueScrapper:
         href = target_entry.get_attribute("href")
         if href and "mpg-match" in href:
             return href, is_match_played, home_team_name, visitor_team_name
+
+        if not is_match_played and home_team_name and visitor_team_name:
+            return None, False, home_team_name, visitor_team_name
 
         current_list_url = self.driver.current_url
 
@@ -888,6 +898,7 @@ class LeagueScrapper:
         """
         score_xpath = get_button_score_balise()
         link_xpath = get_match_link_balise()
+        upcoming_xpath = get_upcoming_match_button_balise()
 
         def _find_visible_entries(driver):
             score_elements = driver.find_elements(By.XPATH, score_xpath)
@@ -899,6 +910,13 @@ class LeagueScrapper:
             visible_links = [elem for elem in link_elements if elem.is_displayed()]
             if visible_links:
                 return visible_links
+
+            upcoming_elements = driver.find_elements(By.XPATH, upcoming_xpath)
+            visible_upcoming = [
+                elem for elem in upcoming_elements if elem.is_displayed()
+            ]
+            if visible_upcoming:
+                return visible_upcoming
 
             return False
 
@@ -992,6 +1010,12 @@ def _is_played_match(match_text: str) -> bool:
 def _extract_team_names_from_text(raw_text: str) -> tuple[str | None, str | None]:
     """Extract home and visitor names from a text block containing 'vs' or score."""
     lines = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    pipe_chunks = [chunk.strip() for chunk in raw_text.split("|") if chunk.strip()]
+    if len(pipe_chunks) == 3 and re.search(r"\d{1,2}\s*:\s*\d{2}", pipe_chunks[1]):
+        return pipe_chunks[0], pipe_chunks[2]
+    if len(lines) == 3 and re.search(r"\d{1,2}\s*:\s*\d{2}", lines[1]):
+        return lines[0], lines[2]
+
     if len(lines) < 3:
         return None, None
 
@@ -1010,6 +1034,11 @@ def _extract_team_names_from_text(raw_text: str) -> tuple[str | None, str | None
 def get_match_link_balise() -> str:
     """Get XPath selecting direct match links from the results page."""
     return "//a[contains(@href, '/mpg-match/')]"
+
+
+def get_upcoming_match_button_balise() -> str:
+    """Get XPath selecting unplayed upcoming-match buttons."""
+    return "//button[contains(normalize-space(.), ' : ')]"
 
 
 def wait_for_scores(driver: Chrome, timeout: int = 10) -> list:

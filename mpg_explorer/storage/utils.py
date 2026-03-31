@@ -8,6 +8,25 @@ from mpg_explorer import LEAGUE_CONFIG
 from mpg_explorer.models.match_dataframe import MatchColumn as MDC
 
 
+def sort_league_matches_for_storage(df: pl.DataFrame) -> pl.DataFrame:
+    """Sort league matches for deterministic parquet output."""
+    sort_columns = [
+        column
+        for column in [
+            MDC.matchweek,
+            MDC.match_played,
+            MDC.home_team_name,
+            MDC.visitor_team_name,
+            MDC.match_id,
+        ]
+        if column in df.columns
+    ]
+    if not sort_columns:
+        return df
+    descending = [False, True, False, False, False][: len(sort_columns)]
+    return df.sort(sort_columns, descending=descending)
+
+
 def get_league_matches_parquet_filename(
     league_id: str, season_number: int, division: int
 ) -> str:
@@ -38,7 +57,7 @@ def save_scraped_league_matches_to_parquet(
     )
 
     parquet_path = target_dir / filename
-    df.write_parquet(str(parquet_path))
+    sort_league_matches_for_storage(df).write_parquet(str(parquet_path))
     return parquet_path
 
 

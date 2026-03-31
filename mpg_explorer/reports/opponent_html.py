@@ -89,8 +89,8 @@ def build_html_report(
 
   <h2>Bonus restants de l'adversaire</h2>
   {remaining_bonus_html}
-  <p><strong>4 défenseurs (adversaire):</strong> {four_def_count}</p>
-  <p><strong>5 défenseurs (adversaire):</strong> {five_def_count}</p>
+  <p><strong>Utilisations adverses de 4 défenseurs:</strong> {four_def_count}</p>
+  <p><strong>Utilisations adverses de 5 défenseurs:</strong> {five_def_count}</p>
 
   <h2>Buts (reels vs MPG) sur toutes les journees</h2>
   <div class="plot">{goals_plot_html}</div>

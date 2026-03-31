@@ -51,7 +51,27 @@ def _extract_team_goals(df: pl.DataFrame, team_name: str) -> list[dict[str, obje
                 .fill_null(0)
                 .cast(pl.Int64)
                 .alias("mpg_goals"),
+                pl.when(is_home)
+                .then(pl.col(MDC.home_total_goals))
+                .otherwise(pl.col(MDC.visitor_total_goals))
+                .fill_null(0)
+                .cast(pl.Int64)
+                .alias("team_total_goals"),
+                pl.when(is_home)
+                .then(pl.col(MDC.visitor_total_goals))
+                .otherwise(pl.col(MDC.home_total_goals))
+                .fill_null(0)
+                .cast(pl.Int64)
+                .alias("opponent_total_goals"),
             ]
+        )
+        .with_columns(
+            pl.when(pl.col("team_total_goals") > pl.col("opponent_total_goals"))
+            .then(pl.lit("WIN"))
+            .when(pl.col("team_total_goals") < pl.col("opponent_total_goals"))
+            .then(pl.lit("LOSS"))
+            .otherwise(pl.lit("DRAW"))
+            .alias("match_result")
         )
         .select(
             [
@@ -60,6 +80,7 @@ def _extract_team_goals(df: pl.DataFrame, team_name: str) -> list[dict[str, obje
                 pl.col("opponent_name"),
                 pl.col("real_goals"),
                 pl.col("mpg_goals"),
+                pl.col("match_result"),
             ]
         )
         .sort("matchweek")
@@ -96,6 +117,7 @@ def _build_goals_plot_html(my_team_name: str, opponent_name: str, df: pl.DataFra
 
     try:
         import matplotlib.pyplot as plt
+        from matplotlib.ticker import MaxNLocator
         from matplotlib.lines import Line2D
     except ModuleNotFoundError as exc:
         raise RuntimeError(
@@ -127,6 +149,10 @@ def _build_goals_plot_html(my_team_name: str, opponent_name: str, df: pl.DataFra
     opponent_line_color = "#7f1d1d"
     my_total = [real + mpg for real, mpg in zip(my_real, my_mpg, strict=False)]
     opp_total = [real + mpg for real, mpg in zip(opp_real, opp_mpg, strict=False)]
+    my_results = [str(my_by_week.get(week, {}).get("match_result", "")) for week in weeks]
+    opp_results = [
+        str(opponent_by_week.get(week, {}).get("match_result", "")) for week in weeks
+    ]
 
     fig, ax = plt.subplots(figsize=(11, 6))
     fig.patch.set_facecolor("white")
@@ -187,6 +213,50 @@ def _build_goals_plot_html(my_team_name: str, opponent_name: str, df: pl.DataFra
     ax.set_xticklabels(tick_text)
     ax.grid(axis="y", linestyle="--", linewidth=0.8, alpha=0.35)
     ax.set_axisbelow(True)
+    ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+
+    label_offset = 0.18
+    for x_pos, total, result in zip(x_my, my_total, my_results, strict=False):
+        if not result:
+            continue
+        ax.text(
+            x_pos,
+            total + label_offset,
+            result,
+            ha="center",
+            va="bottom",
+            fontsize=9,
+            fontweight="bold",
+            color=my_line_color,
+            bbox={
+                "boxstyle": "round,pad=0.25",
+                "facecolor": "#dbeafe",
+                "edgecolor": "none",
+                "alpha": 0.95,
+            },
+        )
+    for x_pos, total, result in zip(x_opp, opp_total, opp_results, strict=False):
+        if not result:
+            continue
+        ax.text(
+            x_pos,
+            total + label_offset,
+            result,
+            ha="center",
+            va="bottom",
+            fontsize=9,
+            fontweight="bold",
+            color=opponent_line_color,
+            bbox={
+                "boxstyle": "round,pad=0.25",
+                "facecolor": "#fee2e2",
+                "edgecolor": "none",
+                "alpha": 0.95,
+            },
+        )
+    ax.set_ylim(0, max(my_total + opp_total, default=0) + 1.0)
 
     legend_handles = [
         plt.Rectangle((0, 0), 1, 1, color=my_real_color, label=f"{my_team_name} - Buts reels"),
