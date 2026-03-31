@@ -12,6 +12,7 @@
 import duckdb
 
 from mpg_explorer import LEAGUE_CONFIG, logger
+from mpg_explorer.reports.scrape_summary import export_scrape_summary_html
 from mpg_explorer.scrap.league import LeagueScrapper
 from mpg_explorer.utils.driver import Driver
 
@@ -33,6 +34,13 @@ df_league, parquet_path = league.scrape_and_save_league(
 # %%
 logger.info(f"Found {df_league.shape[0]} matches.")
 logger.info(f"Saved parquet to: {parquet_path}")
+summary_report_path = export_scrape_summary_html(
+    df=df_league,
+    division=LEAGUE_CONFIG.DIVISION,
+    season_number=LEAGUE_CONFIG.SEASON_NUMBER,
+    output_path=LEAGUE_CONFIG.DATA_PATH / "reports" / "scrape_summary.html",
+)
+logger.info(f"Saved scrape summary report to: {summary_report_path}")
 
 # %%
 df_duckdb = duckdb.sql(
