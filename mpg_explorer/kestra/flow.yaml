@@ -1,4 +1,4 @@
-id: send_mpg_next_opponent_info
+id: mpg_explorer_report
 namespace: company.team
 
 description: This flow will run the mpg explorer package to get your next opponent.
