@@ -90,9 +90,7 @@ class Driver:
         )
         element.click()
 
-        path = Path(
-            "/Users/nicolasthomazo/Documents/Code/MPG_valise_explorer/mpg_explorer"
-        )
+        path = Path("/mnt/appdata/apps/mpg-explorer-data")
         filename = path / "error_screenshot.png"
         logger.info(f"THIS IS THE SNAPSHOT SAVE {filename}")
         self.driver.save_screenshot(filename)
