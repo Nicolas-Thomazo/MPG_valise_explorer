@@ -1,5 +1,7 @@
 FROM python:3.12-slim-bookworm
 
+ENV POLARS_SKIP_CPU_CHECK=1
+
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Install Chromium and its driver for Selenium
