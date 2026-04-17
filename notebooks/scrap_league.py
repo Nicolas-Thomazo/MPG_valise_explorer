@@ -26,6 +26,17 @@ my_driver.login_mpg(
 )
 
 # %%
+previous_df = None
+parquet_path_before = LEAGUE_CONFIG.DATA_PATH / (
+    f"league_{LEAGUE_CONFIG.LEAGUE_ID}_season_{LEAGUE_CONFIG.SEASON_NUMBER}"
+    f"_division_{LEAGUE_CONFIG.DIVISION}.parquet"
+)
+if parquet_path_before.exists():
+    previous_df = duckdb.sql(
+        f"SELECT * FROM read_parquet('{parquet_path_before}')"
+    ).pl()
+
+# %%
 league = LeagueScrapper(driver=my_driver.driver, division=LEAGUE_CONFIG.DIVISION)
 df_league, parquet_path = league.scrape_and_save_league(
     data_path=LEAGUE_CONFIG.DATA_PATH
@@ -39,6 +50,7 @@ summary_report_path = export_scrape_summary_html(
     division=LEAGUE_CONFIG.DIVISION,
     season_number=LEAGUE_CONFIG.SEASON_NUMBER,
     output_path=LEAGUE_CONFIG.DATA_PATH / "reports" / "scrape_summary.html",
+    previous_df=previous_df,
 )
 logger.info(f"Saved scrape summary report to: {summary_report_path}")
 
