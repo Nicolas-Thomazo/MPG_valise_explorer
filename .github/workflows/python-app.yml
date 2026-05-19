@@ -37,4 +37,4 @@ jobs:
         uv pip install -r requirements-dev.txt
     - name: Test with pytest
       run: |
-        pytest tests/unit 
+        uv run pytest tests/unit
