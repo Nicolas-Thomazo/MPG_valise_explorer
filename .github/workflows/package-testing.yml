@@ -18,12 +18,13 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      MPG_USERNAME: "dummy_user"
-      MPG_PASSWORD: "dummy_password"
-      LEAGUE_ID: "dummy_id"
-      TEAM_NAME: "dummy_team"
-      SEASON_NUMBER: 1
-      DIVISION: 1
+      MPG_USERNAME: ${{ secrets.MPG_USERNAME }}
+      MPG_PASSWORD: ${{ secrets.MPG_PASSWORD }}
+      LEAGUE_ID: ${ { secrets.LEAGUE_ID } }
+      TEAM_NAME: ${ { secrets.TEAM_NAME } }
+
+      SEASON_NUMBER: 12
+      DIVISION: 2
       NUMBER_PLAYERS: 8
 
     steps:
@@ -47,4 +48,4 @@ jobs:
   
     - name: Test with pytest
       run: |
-        uv run pytest tests/unit
+        uv run pytest tests/end2end/test_authentification.py
