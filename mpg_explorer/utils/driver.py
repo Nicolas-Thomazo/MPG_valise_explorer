@@ -3,6 +3,7 @@
 import logging
 
 from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
@@ -28,14 +29,20 @@ class Driver:
     def accept_cookies(self):
         """
         Accept cookies to be able to put our logging credentials
-        1- Try to click on this button for every iframe.
-        2- Raising an error if cookies weren't accepted
+        1- Try to click on the Didomi agreement button.
+        2- Wait until the banner backdrop is gone before interacting with the page.
         """
         try:
             accept_button_id = "didomi-notice-agree-button"
-            self.driver.find_element(By.ID, accept_button_id).click()
+            accept_button = WebDriverWait(self.driver, 5).until(
+                EC.element_to_be_clickable((By.ID, accept_button_id))
+            )
+            accept_button.click()
+            WebDriverWait(self.driver, 5).until(
+                EC.invisibility_of_element_located((By.ID, "didomi-popup"))
+            )
             logging.info("Bingo, cookies accepted!")
-        except Exception:
+        except TimeoutException:
             logging.info("No cookie banner detected, continuing")
 
     def login_mpg(

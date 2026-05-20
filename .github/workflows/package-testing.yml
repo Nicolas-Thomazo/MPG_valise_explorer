@@ -1,0 +1,51 @@
+# This workflow will install Python dependencies, run tests and lint with a single version of Python
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+
+name: Test mpg package
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    env:
+      MPG_USERNAME: ${{ secrets.MPG_USERNAME }}
+      MPG_PASSWORD: ${{ secrets.MPG_PASSWORD }}
+      LEAGUE_ID: ${ { secrets.LEAGUE_ID } }
+      TEAM_NAME: ${ { secrets.TEAM_NAME } }
+
+      SEASON_NUMBER: 12
+      DIVISION: 2
+      NUMBER_PLAYERS: 8
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+
+    - name: Create virtual environment
+      run: uv venv
+    
+    - name: Install dependencies
+      run: |
+        uv pip install -r requirements.txt
+        uv pip install -r requirements-dev.txt
+  
+    - name: Test with pytest
+      run: |
+        uv run pytest tests/end2end/test_authentification.py
